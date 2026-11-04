@@ -315,40 +315,10 @@ function fillSettings() {
 }
 
 function renderMl() {
-  const ml = state.ml;
-  const uri = `<div class="copy"><code>${esc(ml.redirectUri)}</code>
-    <button type="button" class="small" data-copy="${esc(ml.redirectUri)}">Copiar</button></div>`;
-  let html;
-  if (!ml.configured) {
-    html = `<p class="hint">Crie um app no Dev Center do Mercado Livre usando esta URI de redirecionamento:</p>${uri}
-      <p class="hint">Depois defina <code>ML_CLIENT_ID</code> e <code>ML_CLIENT_SECRET</code> nas variáveis de ambiente e faça um novo deploy.</p>`;
-  } else if (!ml.connected) {
-    html = `<p class="hint">App configurado. URI de redirecionamento cadastrada no app:</p>${uri}
-      <p><button type="button" class="primary" id="btn-ml-connect">Conectar conta do Mercado Livre</button></p>`;
-  } else {
-    html = `<p class="msg ok">✔ Conta do Mercado Livre conectada.</p>
-      <button type="button" class="small danger" id="btn-ml-disconnect">Desconectar</button>`;
-  }
-  $('#ml-box').innerHTML = html;
+  $("#ml-box").innerHTML = state.ml.configured
+    ? "<p class=\"msg ok\">✔ Mercado Livre configurado. Marque a loja ao adicionar um produto.</p>"
+    : "<p class=\"hint\">Defina <code>ML_CLIENT_ID</code> e <code>ML_CLIENT_SECRET</code> nas variáveis de ambiente (Dev Center do Mercado Livre) e faça um novo deploy.</p>";
 }
-
-$('#ml-box').addEventListener('click', async (e) => {
-  const copy = e.target.closest('[data-copy]');
-  if (copy) {
-    try {
-      await navigator.clipboard.writeText(copy.dataset.copy);
-      copy.textContent = 'Copiado!';
-    } catch {
-      copy.textContent = 'Selecione e copie';
-    }
-  }
-  if (e.target.id === 'btn-ml-connect') location.href = '/api/ml/login';
-  if (e.target.id === 'btn-ml-disconnect') {
-    await api('/ml/disconnect', { method: 'POST' });
-    await refresh();
-    renderMl();
-  }
-});
 
 function readSettings() {
   const f = settingsForm.elements;
@@ -404,24 +374,11 @@ function alertError(err) {
   $('#status').textContent = `Erro: ${err.message}`;
 }
 
-function openTab(name) {
-  document.querySelector(`.tab[data-tab="${name}"]`).click();
-}
-
 async function start() {
   const session = await api('/session');
   if (!session.loggedIn) return showLogin();
   showApp();
   await refresh();
-
-  // Volta do login no Mercado Livre (/api/ml/callback redireciona para /?ml=ok#config).
-  const params = new URLSearchParams(location.search);
-  if (params.has('ml') || location.hash === '#config') {
-    openTab('config');
-    if (params.get('ml') === 'ok') setMsg('Conta do Mercado Livre conectada!', 'ok');
-    if (params.get('ml') === 'erro') setMsg(`Mercado Livre: ${params.get('msg') ?? 'erro'}`, 'error');
-    history.replaceState(null, '', '/');
-  }
 }
 
 start().catch(alertError);

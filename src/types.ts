@@ -83,14 +83,6 @@ export interface CheckReport {
   alerts: Alert[];
 }
 
-/** Tokens OAuth do Mercado Livre (o access token dura 6h; o refresh token renova). */
-export interface MlTokens {
-  accessToken: string;
-  refreshToken: string;
-  expiresAt: number;
-  userId?: number;
-}
-
 export interface DbShape {
   watches: Watch[];
   history: PricePoint[];
@@ -100,5 +92,4 @@ export interface DbShape {
   /** Resultado da última verificação de cada produto. */
   reports: Record<string, CheckReport>;
   settings: Settings;
-  ml?: MlTokens;
 }

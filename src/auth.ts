@@ -1,4 +1,4 @@
-import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import type { NextFunction, Request, Response } from 'express';
 import { isVercel } from './db.ts';
 
@@ -82,4 +82,3 @@ export function isCronAuthorized(req: Request): boolean {
   return safeEqual(req.headers.authorization ?? '', `Bearer ${secret}`);
 }
 
-export const randomToken = () => randomBytes(16).toString('base64url');

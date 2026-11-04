@@ -84,8 +84,6 @@ legend { font-size: .85rem; color: var(--muted); padding: 0 .3rem; }
 .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.25rem; max-width: 640px; }
 .panel.login { margin: 12vh auto 0; max-width: 360px; }
 .panel.login h1 { margin-bottom: 1rem; }
-.copy { display: flex; gap: .5rem; align-items: center; }
-.copy code { flex: 1; padding: .4rem .6rem; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; overflow-x: auto; white-space: nowrap; }
 .msg { min-height: 1.2em; font-size: .9rem; }
 .msg.error { color: var(--danger); }
 .msg.ok { color: var(--good); }

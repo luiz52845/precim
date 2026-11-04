@@ -1,22 +1,12 @@
 import './env.ts';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { join } from 'node:path';
-import {
-  authEnabled,
-  isCronAuthorized,
-  isLoggedIn,
-  login,
-  logout,
-  randomToken,
-  readCookie,
-  requireLogin,
-  setCookie,
-} from './auth.ts';
+import { authEnabled, isCronAuthorized, isLoggedIn, login, logout, requireLogin } from './auth.ts';
 import { isVercel, loadDb, mutate, newId, storageKind } from './db.ts';
 import { checkBatch, checkWatch } from './monitor.ts';
 import { notifyAll, telegramChats } from './notify/index.ts';
 import { STORES } from './scrapers/index.ts';
-import { mlAuthorizeUrl, mlConfigured, mlExchangeCode, mlRedirectUri } from './scrapers/mercadolivre.ts';
+import { mlConfigured } from './scrapers/mercadolivre.ts';
 import type { DbShape, Settings, StoreId, Watch } from './types.ts';
 
 /** Tempo máximo gasto verificando produtos numa requisição (a função tem limite de 60s). */
@@ -130,11 +120,7 @@ app.get(
       scheduleInfo: scheduleInfo(),
       storage: storageKind,
       authEnabled: authEnabled(),
-      ml: {
-        configured: mlConfigured(),
-        connected: Boolean(db.ml),
-        redirectUri: mlRedirectUri(req.get('host'), req.protocol),
-      },
+      ml: { configured: mlConfigured() },
     });
   }),
 );
@@ -258,46 +244,6 @@ app.post(
     const token = String(req.body?.botToken ?? '').trim();
     if (!token) throw new BadRequest('informe o token do bot');
     res.json(await telegramChats(token));
-  }),
-);
-
-// ---------- Mercado Livre (OAuth) ----------
-
-app.get('/api/ml/login', (req, res) => {
-  if (!mlConfigured()) {
-    res.status(400).send('Defina ML_CLIENT_ID e ML_CLIENT_SECRET nas variáveis de ambiente.');
-    return;
-  }
-  const state = randomToken();
-  setCookie(req, res, 'ml_state', state, 600);
-  res.redirect(mlAuthorizeUrl(mlRedirectUri(req.get('host'), req.protocol), state));
-});
-
-app.get(
-  '/api/ml/callback',
-  h(async (req, res) => {
-    const { code, state, error } = req.query as Record<string, string | undefined>;
-    if (error) return res.redirect(`/?ml=erro&msg=${encodeURIComponent(error)}#config`);
-    // O "state" impede que outra pessoa conecte a conta dela no seu painel (CSRF).
-    if (!code || !state || state !== readCookie(req, 'ml_state')) {
-      return res.redirect('/?ml=erro&msg=' + encodeURIComponent('autorização inválida ou expirada, tente de novo') + '#config');
-    }
-    setCookie(req, res, 'ml_state', '', 0);
-    const tokens = await mlExchangeCode(code, mlRedirectUri(req.get('host'), req.protocol));
-    await mutate((d) => {
-      d.ml = tokens;
-    });
-    res.redirect('/?ml=ok#config');
-  }),
-);
-
-app.post(
-  '/api/ml/disconnect',
-  h(async (_req, res) => {
-    await mutate((d) => {
-      delete d.ml;
-    });
-    res.json({ ok: true });
   }),
 );
 

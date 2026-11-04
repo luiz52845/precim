@@ -1,12 +1,18 @@
 import type { Offer, PricePoint, Watch } from './types.ts';
 
-/** Minúsculas, sem acentos, só letras/números separados por espaço. */
+/**
+ * Minúsculas, sem acentos, só letras/números separados por espaço. Separa números de
+ * letras ("128GB" -> "128 gb", "iPhone15" -> "iphone 15") para que "128gb" na busca
+ * case com "128 GB" no título.
+ */
 export function normalize(text: string): string {
   return text
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/(\d)([a-z])/g, '$1 $2')
+    .replace(/([a-z])(\d)/g, '$1 $2')
     .trim();
 }
 

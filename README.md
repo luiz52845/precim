@@ -22,9 +22,8 @@ npm run build      # compila para dist/ (usado pela Vercel)
 3. **Variáveis de ambiente** (Settings → Environment Variables):
    - `APP_PASSWORD`: a senha do painel;
    - `CRON_SECRET`: um texto aleatório longo;
-   - `ML_CLIENT_ID` e `ML_CLIENT_SECRET`: quando tiver o app do Mercado Livre.
+   - `ML_CLIENT_ID` e `ML_CLIENT_SECRET`: App ID e chave secreta do app no Dev Center do Mercado Livre.
 4. **Faça um novo deploy** (Deployments → Redeploy) para as variáveis valerem.
-5. **Mercado Livre:** no Dev Center, use como URI de redirecionamento `https://SEU-PROJETO.vercel.app/api/ml/callback` (a aba Configurações mostra a URI exata com botão de copiar). Depois clique em **Conectar conta do Mercado Livre**.
 
 **Verificações automáticas:** o Vercel Cron chama `/api/cron` uma vez por dia às 11:00 UTC (08:00 de Brasília), que é o limite do plano gratuito. Para verificar com mais frequência sem pagar, use um agendador externo (ex.: cron-job.org) chamando `GET https://SEU-PROJETO.vercel.app/api/cron` com o cabeçalho `Authorization: Bearer <CRON_SECRET>`. Só são verificados os produtos cujo intervalo (definido em Configurações) já passou.
 
@@ -46,7 +45,7 @@ Cada chamada verifica produtos por até ~40 segundos. Se houver muitos, os resta
 | Kabum | ✅ busca funciona (lê o JSON embutido na página) |
 | Amazon | ⚠️ funciona às vezes; a Amazon devolve 503 para acesso automatizado com frequência |
 | Links de produto | ✅ em lojas que publicam dados estruturados e não bloqueiam robôs |
-| Mercado Livre | 🔧 pela API oficial (OAuth). Ainda não testado com credenciais reais |
+| Mercado Livre | ✅ pela API oficial: busca no catálogo (`/products/search`) e preço das ofertas (`/products/{id}/items`). A busca comum `/sites/MLB/search` é restrita (403) |
 | Magalu, Casas Bahia, Pichau, Terabyte, Shopee | ❌ bloqueiam acesso automatizado (403 / anti-bot) |
 
 O projeto **não tenta contornar** proteções anti-bot. Para a Shopee, o caminho é a API do programa de afiliados.
@@ -76,7 +75,7 @@ Produtos, histórico, alertas, configurações e tokens ficam num único documen
 api/index.js         função serverless da Vercel (carrega dist/app.js)
 vercel.json          build, rotas, limite de tempo e cron
 src/
-  app.ts             API (Express): rotas, login, OAuth do Mercado Livre
+  app.ts             API (Express): rotas e login
   server.ts          servidor local + agendador
   auth.ts            senha do painel, sessão e autorização do cron
   monitor.ts         verificação em lotes e regras de alerta
