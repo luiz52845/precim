@@ -1,4 +1,4 @@
-// Interface do Monitor de Preços (JavaScript puro, sem build).
+// Interface do Precim (JavaScript puro, sem build).
 const $ = (sel, root = document) => root.querySelector(sel);
 const brl = (n) => (n == null ? '—' : n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }));
 const when = (iso) => (iso ? new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : 'nunca');

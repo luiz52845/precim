@@ -1,6 +1,6 @@
-# Monitor de Preços
+# Precim
 
-Acompanha preços de produtos em lojas online e manda mensagem no **Telegram** e/ou **WhatsApp** quando aparece uma oferta interessante.
+Monitor de preços: acompanha produtos em lojas online e manda mensagem no **Telegram** e/ou **WhatsApp** quando aparece uma oferta interessante.
 
 ## Como rodar
 

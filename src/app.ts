@@ -248,7 +248,7 @@ app.post(
   '/api/notify/test',
   h(async (_req, res) => {
     const db = await loadDb();
-    res.json(await notifyAll(db.settings, '✅ <b>Monitor de Preços</b>\nNotificações funcionando!'));
+    res.json(await notifyAll(db.settings, '✅ <b>Precim</b>\nNotificações funcionando!'));
   }),
 );
 

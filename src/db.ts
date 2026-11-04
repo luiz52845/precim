@@ -9,7 +9,7 @@ import type { DbShape, Settings } from './types.ts';
  * Suficiente para uso pessoal; troque por Postgres se o volume crescer.
  */
 
-const KEY = 'monitor-precos:db';
+const KEY = 'precim:db';
 const MAX_HISTORY_PER_WATCH = 500;
 const MAX_ALERTS = 300;
 

@@ -10,7 +10,7 @@ const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '127.0.0.1';
 
 app.listen(PORT, HOST, () => {
-  console.log(`Monitor de Preços rodando em http://localhost:${PORT}`);
+  console.log(`Precim rodando em http://localhost:${PORT}`);
 });
 
 // A cada minuto, verifica os produtos cujo intervalo (definido em Configurações) já passou.

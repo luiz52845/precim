@@ -1,5 +1,5 @@
 {
-  "name": "monitor-precos",
+  "name": "precim",
   "version": "0.1.0",
   "private": true,
   "description": "Monitora preços de produtos em lojas online e avisa no Telegram/WhatsApp quando aparece uma oferta interessante.",
