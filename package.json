@@ -1,0 +1,26 @@
+{
+  "name": "monitor-precos",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Monitora preços de produtos em lojas online e avisa no Telegram/WhatsApp quando aparece uma oferta interessante.",
+  "type": "module",
+  "engines": {
+    "node": "24.x"
+  },
+  "scripts": {
+    "start": "node src/server.ts",
+    "dev": "node --watch src/server.ts",
+    "check": "node src/cli-check.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "cheerio": "1.0.0",
+    "express": "^4.22.3"
+  },
+  "devDependencies": {
+    "@types/express": "4.17.21",
+    "@types/node": "22.10.2",
+    "typescript": "^5.8.3"
+  }
+}

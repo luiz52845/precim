@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Monitor de Preços</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- LOGIN -->
+  <main id="login-screen" hidden>
+    <form id="login-form" class="panel login">
+      <h1>Monitor de Preços</h1>
+      <label>Senha <input type="password" name="password" autocomplete="current-password" required /></label>
+      <button class="primary" type="submit">Entrar</button>
+      <p id="login-msg" class="msg"></p>
+    </form>
+  </main>
+
+  <div id="app" hidden>
+  <header class="topbar">
+    <h1>Monitor de Preços</h1>
+    <nav>
+      <button class="tab active" data-tab="produtos">Produtos</button>
+      <button class="tab" data-tab="alertas">Alertas</button>
+      <button class="tab" data-tab="config">Configurações</button>
+    </nav>
+    <span id="status" class="muted"></span>
+    <button id="btn-logout" class="small" hidden>Sair</button>
+  </header>
+
+  <main>
+    <!-- PRODUTOS -->
+    <section id="tab-produtos">
+      <div class="toolbar">
+        <button id="btn-new" class="primary">+ Adicionar produto</button>
+        <button id="btn-check-all">Verificar todos agora</button>
+      </div>
+      <div id="watch-list" class="cards"></div>
+      <p id="empty" class="empty" hidden>
+        Nenhum produto ainda. Clique em <b>Adicionar produto</b> e informe o que você quer acompanhar.
+      </p>
+    </section>
+
+    <!-- ALERTAS -->
+    <section id="tab-alertas" hidden>
+      <div id="alert-list"></div>
+    </section>
+
+    <!-- CONFIGURAÇÕES -->
+    <section id="tab-config" hidden>
+      <form id="settings-form" class="panel">
+        <h2>Verificação automática</h2>
+        <label>Intervalo (minutos)
+          <input type="number" name="intervalMinutes" min="5" step="1" required />
+        </label>
+        <p class="hint">Mínimo 5 min. Intervalos curtos aumentam a chance de as lojas bloquearem o acesso.</p>
+        <p class="hint" id="schedule-info"></p>
+
+        <h2>Mercado Livre</h2>
+        <div id="ml-box"></div>
+
+        <h2>Telegram</h2>
+        <label class="check"><input type="checkbox" name="telegram.enabled" /> Enviar alertas pelo Telegram</label>
+        <label>Token do bot <input name="telegram.botToken" autocomplete="off" placeholder="123456:ABC..." /></label>
+        <label>Chat ID
+          <span class="row">
+            <input name="telegram.chatId" placeholder="ex.: 123456789" />
+            <button type="button" id="btn-find-chat">Descobrir</button>
+          </span>
+        </label>
+        <p class="hint">
+          1) No Telegram, fale com <b>@BotFather</b>, envie <code>/newbot</code> e copie o token.
+          2) Abra o seu bot e mande qualquer mensagem. 3) Clique em <b>Descobrir</b>.
+        </p>
+
+        <h2>WhatsApp (CallMeBot)</h2>
+        <label class="check"><input type="checkbox" name="whatsapp.enabled" /> Enviar alertas pelo WhatsApp</label>
+        <label>Seu número (com DDI) <input name="whatsapp.phone" placeholder="+5511999999999" /></label>
+        <label>API key <input name="whatsapp.apiKey" autocomplete="off" /></label>
+        <p class="hint">
+          Serviço gratuito para uso pessoal. Siga as instruções em
+          <code>callmebot.com/blog/free-api-whatsapp-messages</code> para autorizar o seu número e receber a API key.
+        </p>
+
+        <div class="toolbar">
+          <button class="primary" type="submit">Salvar</button>
+          <button type="button" id="btn-test">Enviar mensagem de teste</button>
+        </div>
+        <p id="settings-msg" class="msg"></p>
+      </form>
+    </section>
+  </main>
+  </div>
+
+  <!-- Formulário de produto -->
+  <dialog id="watch-dialog">
+    <form id="watch-form" method="dialog">
+      <h2 id="watch-form-title">Adicionar produto</h2>
+      <label>Nome <input name="name" placeholder="ex.: iPhone 15 128GB" /></label>
+
+      <fieldset>
+        <legend>Buscar nas lojas</legend>
+        <label>Termo de busca <input name="query" placeholder="ex.: iphone 15 128gb" /></label>
+        <div id="store-checks" class="row wrap"></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>…e/ou acompanhar links específicos</legend>
+        <label>Links de produto (um por linha)
+          <textarea name="urls" rows="3" placeholder="https://loja.com.br/produto/..."></textarea>
+        </label>
+        <p class="hint">Funciona com lojas que publicam o preço em dados estruturados e não bloqueiam acesso automatizado.</p>
+      </fieldset>
+
+      <fieldset>
+        <legend>Filtros (para descartar acessórios e produtos parecidos)</legend>
+        <label>Palavras obrigatórias <input name="requiredWords" placeholder="ex.: 128gb" /></label>
+        <label>Palavras excluídas <input name="excludeWords" placeholder="ex.: capa, película, case, usado" /></label>
+        <div class="row">
+          <label>Preço mínimo <input name="minPrice" inputmode="decimal" /></label>
+          <label>Preço máximo <input name="maxPrice" inputmode="decimal" /></label>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Quando avisar</legend>
+        <div class="row">
+          <label>Preço alvo (R$) <input name="targetPrice" inputmode="decimal" placeholder="ex.: 3500" /></label>
+          <label>Queda de % na média <input name="dropPercent" inputmode="decimal" placeholder="ex.: 10" /></label>
+        </div>
+        <p class="hint">Avisa quando o preço chegar ao alvo <b>ou</b> ficar X% abaixo da média dos últimos 30 dias.</p>
+      </fieldset>
+
+      <label class="check"><input type="checkbox" name="active" checked /> Ativo (incluir nas verificações automáticas)</label>
+
+      <p id="watch-msg" class="msg"></p>
+      <div class="toolbar end">
+        <button type="button" id="btn-cancel">Cancelar</button>
+        <button type="submit" class="primary" id="btn-save">Salvar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Detalhes -->
+  <dialog id="detail-dialog" class="wide">
+    <div id="detail"></div>
+    <div class="toolbar end"><button id="btn-close-detail">Fechar</button></div>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>
