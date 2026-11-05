@@ -101,6 +101,9 @@ legend { font-size: .85rem; color: var(--muted); padding: 0 .3rem; }
 .card .best-title a { color: inherit; }
 .unit { font-size: .8rem; font-weight: 400; color: var(--muted); }
 .badges { display: flex; flex-wrap: wrap; gap: .25rem; margin-top: .25rem; }
+.aff-row { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; margin-top: .4rem; }
+.aff-row input { width: auto; flex: 1 1 12rem; margin: 0; padding: .25rem .5rem; font-size: .85rem; }
+.small-link { font-size: .85rem; font-weight: 600; white-space: nowrap; }
 .card .actions { display: flex; gap: .4rem; flex-wrap: wrap; margin-top: auto; padding-top: .4rem; }
 .badge { display: inline-block; font-size: .75rem; padding: .1rem .5rem; border-radius: 99px; background: var(--bg); border: 1px solid var(--border); }
 .badge.good { background: var(--good-bg); color: var(--good); border-color: transparent; font-weight: 600; }

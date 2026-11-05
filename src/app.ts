@@ -7,7 +7,7 @@ import { checkBatch, checkWatch } from './monitor.ts';
 import { notifyAll, telegramChats } from './notify/index.ts';
 import { STORES } from './scrapers/index.ts';
 import { mlConfigured } from './scrapers/mercadolivre.ts';
-import { parseAffiliateInput, withAffiliate } from './affiliate.ts';
+import { isMercadoLivreUrl, parseAffiliateInput, validateProductAffiliateLink, withAffiliate } from './affiliate.ts';
 import type { CheckReport, DbShape, Settings, StoreId, Watch } from './types.ts';
 
 /** Tempo máximo gasto verificando produtos numa requisição (a função tem limite de 60s). */
@@ -108,13 +108,13 @@ function parseAffiliate(input: string): string {
 }
 
 /** Troca os links do relatório pelos links de afiliado (só na resposta; o banco guarda os originais). */
-function affiliateReport(report: CheckReport | undefined, settings: Settings): CheckReport | undefined {
+function affiliateReport(report: CheckReport | undefined, db: DbShape): CheckReport | undefined {
   if (!report) return report;
   return {
     ...report,
-    offers: report.offers.map((o) => withAffiliate(o, settings)),
-    best: report.best && withAffiliate(report.best, settings),
-    alerts: report.alerts.map((a) => ({ ...a, offer: withAffiliate(a.offer, settings) })),
+    offers: report.offers.map((o) => withAffiliate(o, db)),
+    best: report.best && withAffiliate(report.best, db),
+    alerts: report.alerts.map((a) => ({ ...a, offer: withAffiliate(a.offer, db) })),
   };
 }
 
@@ -137,7 +137,7 @@ app.get(
     res.json({
       watches: db.watches.map((w) => {
         const best = db.reports[w.id]?.best ?? lastBest(w.id);
-        return { ...w, best: best && withAffiliate(best, db.settings) };
+        return { ...w, best: best && withAffiliate(best, db) };
       }),
       stores: Object.entries(STORES).map(([id, s]) => ({ id, label: s.label })),
       settings: db.settings,
@@ -156,13 +156,13 @@ app.get(
     const watch = findWatch(db, req.params.id);
     res.json({
       watch,
-      report: affiliateReport(db.reports[watch.id], db.settings),
+      report: affiliateReport(db.reports[watch.id], db),
       history: db.history.filter((p) => p.watchId === watch.id),
       alerts: db.alerts
         .filter((a) => a.watchId === watch.id)
         .slice(-20)
         .reverse()
-        .map((a) => ({ ...a, offer: withAffiliate(a.offer, db.settings) })),
+        .map((a) => ({ ...a, offer: withAffiliate(a.offer, db) })),
     });
   }),
 );
@@ -177,7 +177,7 @@ app.post(
     });
     // Primeira verificação imediata para já mostrar preços.
     const report = await checkWatch(db, watch);
-    res.status(201).json({ watch, report: affiliateReport(report, db.settings) });
+    res.status(201).json({ watch, report: affiliateReport(report, db) });
   }),
 );
 
@@ -212,7 +212,7 @@ app.post(
   '/api/watches/:id/check',
   h(async (req, res) => {
     const db = await loadDb();
-    res.json(affiliateReport(await checkWatch(db, findWatch(db, req.params.id)), db.settings));
+    res.json(affiliateReport(await checkWatch(db, findWatch(db, req.params.id)), db));
   }),
 );
 
@@ -232,7 +232,7 @@ app.get(
       db.alerts
         .slice(-100)
         .reverse()
-        .map((a) => ({ ...a, offer: withAffiliate(a.offer, db.settings), watchName: names.get(a.watchId) })),
+        .map((a) => ({ ...a, offer: withAffiliate(a.offer, db), watchName: names.get(a.watchId) })),
     );
   }),
 );
@@ -269,6 +269,32 @@ app.post(
   h(async (_req, res) => {
     const db = await loadDb();
     res.json(await notifyAll(db.settings, '✅ <b>Precim</b>\nNotificações funcionando!'));
+  }),
+);
+
+/**
+ * Salva (ou remove, com link vazio) o link de afiliado final de um produto do Mercado Livre.
+ * Corpo: { productUrl: link original da oferta, link: "https://meli.la/..." }
+ */
+app.put(
+  '/api/affiliate-links',
+  h(async (req, res) => {
+    const productUrl = String(req.body?.productUrl ?? '').trim();
+    if (!isMercadoLivreUrl(productUrl)) throw new BadRequest('produto inválido: precisa ser um link do Mercado Livre');
+    const raw = String(req.body?.link ?? '').trim();
+    let link = '';
+    if (raw) {
+      try {
+        link = validateProductAffiliateLink(raw);
+      } catch (err) {
+        throw new BadRequest((err as Error).message);
+      }
+    }
+    await mutate((d) => {
+      if (link) d.affiliateLinks[productUrl] = link;
+      else delete d.affiliateLinks[productUrl];
+    });
+    res.json({ productUrl, link });
   }),
 );
 

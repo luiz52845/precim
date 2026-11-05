@@ -102,5 +102,7 @@ export interface DbShape {
   notified: Record<string, { price: number; at: string }>;
   /** Resultado da última verificação de cada produto. */
   reports: Record<string, CheckReport>;
+  /** Link de afiliado final (meli.la) por link de produto do Mercado Livre. */
+  affiliateLinks: Record<string, string>;
   settings: Settings;
 }

@@ -125,7 +125,13 @@ function renderWatches() {
         <div class="muted">Verificado: ${when(w.lastCheckAt)}</div>
         ${w.lastError ? `<div class="error-box">⚠ ${esc(w.lastError)}</div>` : ''}
         <div class="actions">
-          ${best ? `<button class="small" data-copy="${esc(best.url)}">Copiar link</button>` : ''}
+          ${
+            !best
+              ? ''
+              : best.hasAffiliateLink === false
+                ? `<button class="small primary" data-act="detail">Gerar link de afiliado</button>`
+                : `<button class="small" data-copy="${esc(best.url)}">Copiar link</button>`
+          }
           <button class="small" data-act="detail">Ver ofertas</button>
           <button class="small" data-act="check">Verificar</button>
           <button class="small" data-act="edit">Editar</button>
@@ -251,8 +257,65 @@ watchForm.addEventListener('submit', async (e) => {
   }
 });
 
+// ---------- links de afiliado ----------
+
+/**
+ * Ações de link em cada oferta:
+ *  - já tem link de afiliado final (meli.la): copiar;
+ *  - Mercado Livre sem link: abrir a página (com seu matt_word) para clicar em
+ *    Compartilhar, e campo para colar o link gerado;
+ *  - outras lojas: copiar o link normal.
+ */
+function affiliateCell(o) {
+  if (o.hasAffiliateLink) {
+    return `<div class="aff-row">
+      <span class="badge good">link de afiliado ✓</span>
+      <button class="small" data-copy="${esc(o.url)}">Copiar link</button>
+      <button class="small" data-aff-remove="${esc(o.rawUrl)}">Trocar</button>
+    </div>`;
+  }
+  if (o.shareUrl) {
+    return `<form class="aff-row" data-aff-form="${esc(o.rawUrl)}">
+      <a class="small-link" href="${esc(o.shareUrl)}" target="_blank" rel="noopener">1. Gerar link de afiliado ↗</a>
+      <input name="link" placeholder="2. cole aqui o link meli.la" autocomplete="off" />
+      <button class="small primary" type="submit">Salvar</button>
+    </form>`;
+  }
+  return `<button class="small" data-copy="${esc(o.url)}">Copiar link</button>`;
+}
+
+let detailId = null;
+
+async function saveAffiliateLink(productUrl, link) {
+  await api('/affiliate-links', { method: 'PUT', body: { productUrl, link } });
+  await openDetail(detailId); // redesenha com o link novo
+  refresh().catch(() => {});
+}
+
+$('#detail').addEventListener('submit', async (e) => {
+  const form = e.target.closest('[data-aff-form]');
+  if (!form) return;
+  e.preventDefault();
+  const btn = form.querySelector('button');
+  btn.disabled = true;
+  try {
+    await saveAffiliateLink(form.dataset.affForm, form.elements.link.value);
+  } catch (err) {
+    btn.disabled = false;
+    form.elements.link.setCustomValidity(err.message);
+    form.elements.link.reportValidity();
+    form.elements.link.addEventListener('input', () => form.elements.link.setCustomValidity(''), { once: true });
+  }
+});
+
+$('#detail').addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-aff-remove]');
+  if (btn) await saveAffiliateLink(btn.dataset.affRemove, '');
+});
+
 // ---------- detalhes ----------
 async function openDetail(id) {
+  detailId = id;
   const { watch, report, history, alerts } = await api(`/watches/${id}`);
   const offers = report?.offers;
   $('#detail').innerHTML = `
@@ -277,7 +340,7 @@ async function openDetail(id) {
                   (o) => `<tr>
                   <td>${o.image ? `<img src="${esc(o.image)}" alt="" loading="lazy">` : ''}</td>
                   <td><a href="${esc(o.url)}" target="_blank" rel="noopener">${esc(o.title)}</a>${badgesHtml(o)}
-                    <button class="small" data-copy="${esc(o.url)}">Copiar link</button></td>
+                    ${affiliateCell(o)}</td>
                   <td>${esc(o.store)}</td>
                   <td class="num"><b>${brl(o.price)}</b>${o.oldPrice > o.price ? `<br><s>${brl(o.oldPrice)}</s>` : ''}${
                     o.units > 1 ? `<br><span class="unit">${brl(o.price / o.units)}/un.</span>` : ''
@@ -293,7 +356,7 @@ async function openDetail(id) {
         ? `<h3 class="muted">Alertas recentes</h3>${alerts.map(alertHtml).join('')}`
         : ''
     }`;
-  $('#detail-dialog').showModal();
+  if (!$('#detail-dialog').open) $('#detail-dialog').showModal();
 }
 $('#btn-close-detail').addEventListener('click', () => $('#detail-dialog').close());
 

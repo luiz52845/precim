@@ -77,7 +77,7 @@ function formatMessage(watch: Watch, offer: Offer, reason: string, db: DbShape):
     offer.badges?.length ? `🏷️ ${esc(offer.badges.join(' · '))}` : '',
     `📉 ${esc(reason)}`,
     // Link de afiliado (Mercado Livre), quando configurado.
-    affiliateUrl(offer.url, db.settings),
+    affiliateUrl(offer.url, db),
   ]
     .filter(Boolean)
     .join('\n');
