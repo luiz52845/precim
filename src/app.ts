@@ -7,7 +7,8 @@ import { checkBatch, checkWatch } from './monitor.ts';
 import { notifyAll, telegramChats } from './notify/index.ts';
 import { STORES } from './scrapers/index.ts';
 import { mlConfigured } from './scrapers/mercadolivre.ts';
-import type { DbShape, Settings, StoreId, Watch } from './types.ts';
+import { parseAffiliateInput, withAffiliate } from './affiliate.ts';
+import type { CheckReport, DbShape, Settings, StoreId, Watch } from './types.ts';
 
 /** Tempo máximo gasto verificando produtos numa requisição (a função tem limite de 60s). */
 const BATCH_BUDGET_MS = 40_000;
@@ -90,10 +91,30 @@ function parseWatch(body: any, base?: Watch): Watch {
     maxPrice: optNumber(body.maxPrice),
     targetPrice: optNumber(body.targetPrice),
     dropPercent: optNumber(body.dropPercent),
+    compareUnitPrice: body.compareUnitPrice === true || undefined,
     active: body.active !== false,
     createdAt: base?.createdAt ?? new Date().toISOString(),
     lastCheckAt: base?.lastCheckAt,
     lastError: base?.lastError,
+  };
+}
+
+function parseAffiliate(input: string): string {
+  try {
+    return parseAffiliateInput(input);
+  } catch (err) {
+    throw new BadRequest(`Link de afiliado: ${(err as Error).message}`);
+  }
+}
+
+/** Troca os links do relatório pelos links de afiliado (só na resposta; o banco guarda os originais). */
+function affiliateReport(report: CheckReport | undefined, settings: Settings): CheckReport | undefined {
+  if (!report) return report;
+  return {
+    ...report,
+    offers: report.offers.map((o) => withAffiliate(o, settings)),
+    best: report.best && withAffiliate(report.best, settings),
+    alerts: report.alerts.map((a) => ({ ...a, offer: withAffiliate(a.offer, settings) })),
   };
 }
 
@@ -114,7 +135,10 @@ app.get(
     const db = await loadDb();
     const lastBest = (id: string) => db.history.findLast((p) => p.watchId === id);
     res.json({
-      watches: db.watches.map((w) => ({ ...w, best: db.reports[w.id]?.best ?? lastBest(w.id) })),
+      watches: db.watches.map((w) => {
+        const best = db.reports[w.id]?.best ?? lastBest(w.id);
+        return { ...w, best: best && withAffiliate(best, db.settings) };
+      }),
       stores: Object.entries(STORES).map(([id, s]) => ({ id, label: s.label })),
       settings: db.settings,
       scheduleInfo: scheduleInfo(),
@@ -132,9 +156,13 @@ app.get(
     const watch = findWatch(db, req.params.id);
     res.json({
       watch,
-      report: db.reports[watch.id],
+      report: affiliateReport(db.reports[watch.id], db.settings),
       history: db.history.filter((p) => p.watchId === watch.id),
-      alerts: db.alerts.filter((a) => a.watchId === watch.id).slice(-20).reverse(),
+      alerts: db.alerts
+        .filter((a) => a.watchId === watch.id)
+        .slice(-20)
+        .reverse()
+        .map((a) => ({ ...a, offer: withAffiliate(a.offer, db.settings) })),
     });
   }),
 );
@@ -149,7 +177,7 @@ app.post(
     });
     // Primeira verificação imediata para já mostrar preços.
     const report = await checkWatch(db, watch);
-    res.status(201).json({ watch, report });
+    res.status(201).json({ watch, report: affiliateReport(report, db.settings) });
   }),
 );
 
@@ -184,7 +212,7 @@ app.post(
   '/api/watches/:id/check',
   h(async (req, res) => {
     const db = await loadDb();
-    res.json(await checkWatch(db, findWatch(db, req.params.id)));
+    res.json(affiliateReport(await checkWatch(db, findWatch(db, req.params.id)), db.settings));
   }),
 );
 
@@ -200,7 +228,12 @@ app.get(
   h(async (_req, res) => {
     const db = await loadDb();
     const names = new Map(db.watches.map((w) => [w.id, w.name]));
-    res.json(db.alerts.slice(-100).reverse().map((a) => ({ ...a, watchName: names.get(a.watchId) })));
+    res.json(
+      db.alerts
+        .slice(-100)
+        .reverse()
+        .map((a) => ({ ...a, offer: withAffiliate(a.offer, db.settings), watchName: names.get(a.watchId) })),
+    );
   }),
 );
 
@@ -222,6 +255,7 @@ app.put(
         phone: String(b.whatsapp?.phone ?? '').trim(),
         apiKey: String(b.whatsapp?.apiKey ?? '').trim(),
       },
+      affiliate: { mlParams: parseAffiliate(String(b.affiliate?.mlParams ?? '')) },
     };
     await mutate((d) => {
       d.settings = settings;

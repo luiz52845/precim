@@ -1,11 +1,12 @@
+import { detectUnits } from '../deals.ts';
 import type { Offer } from '../types.ts';
 
 /**
  * Mercado Livre pela API oficial.
  *
- * A busca comum (/sites/MLB/search) é restrita para apps novos (403), então usamos o
- * catálogo: /products/search encontra os produtos e /products/{id}/items traz as ofertas
- * dos vendedores com preço.
+ * A busca comum (/sites/MLB/search) e os detalhes de anúncio (/items) são restritos para
+ * apps novos (403), então usamos o catálogo: /products/search encontra os produtos e
+ * /products/{id}/items traz TODAS as ofertas dos vendedores, das quais pegamos a mais barata.
  *
  * O token é do próprio app (grant_type=client_credentials): basta ML_CLIENT_ID e
  * ML_CLIENT_SECRET, sem precisar conectar uma conta de usuário.
@@ -13,7 +14,9 @@ import type { Offer } from '../types.ts';
 
 const API = 'https://api.mercadolibre.com';
 /** Quantos produtos do catálogo consultar por busca (cada um custa 1 requisição). */
-const MAX_PRODUCTS = 10;
+const MAX_PRODUCTS = 20;
+/** Requisições simultâneas à API. */
+const CONCURRENCY = 5;
 
 export const mlConfigured = () => Boolean(process.env.ML_CLIENT_ID && process.env.ML_CLIENT_SECRET);
 
@@ -49,6 +52,20 @@ async function get<T>(path: string, token: string): Promise<{ status: number; bo
   return { status: res.status, body: (await res.json().catch(() => undefined)) as T | undefined };
 }
 
+/** Executa `fn` sobre a lista com no máximo `limit` chamadas em paralelo. */
+async function mapLimit<T, R>(list: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = new Array(list.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(limit, list.length) }, async () => {
+    while (next < list.length) {
+      const i = next++;
+      out[i] = await fn(list[i]);
+    }
+  });
+  await Promise.all(workers);
+  return out;
+}
+
 interface CatalogProduct {
   id: string;
   name: string;
@@ -60,6 +77,19 @@ interface CatalogItem {
   price: number;
   original_price: number | null;
   condition?: string;
+  official_store_id?: number | null;
+  shipping?: { free_shipping?: boolean; logistic_type?: string };
+}
+
+function badgesFor(item: CatalogItem): string[] {
+  const badges: string[] = [];
+  if (item.original_price && item.original_price > item.price) {
+    badges.push(`-${Math.round((1 - item.price / item.original_price) * 100)}%`);
+  }
+  if (item.shipping?.free_shipping) badges.push('Frete grátis');
+  if (item.shipping?.logistic_type === 'fulfillment') badges.push('Full');
+  if (item.official_store_id) badges.push('Loja oficial');
+  return badges;
 }
 
 export async function searchMercadoLivre(query: string): Promise<Offer[]> {
@@ -72,26 +102,26 @@ export async function searchMercadoLivre(query: string): Promise<Offer[]> {
     throw new Error(`Mercado Livre (busca no catálogo): ${search.body?.message ?? `HTTP ${search.status}`}`);
   }
 
-  const products = search.body?.results ?? [];
-  const offers = await Promise.all(
-    products.map(async (p): Promise<Offer | undefined> => {
-      // 404 "No winners found" = produto sem vendedor ativo no momento.
-      const { status, body } = await get<{ results?: CatalogItem[] }>(`/products/${p.id}/items?limit=5`, token);
-      if (status !== 200) return undefined;
-      const items = (body?.results ?? []).filter((i) => i.condition !== 'used' && i.price > 0);
-      if (!items.length) return undefined;
-      const cheapest = items.reduce((a, b) => (b.price < a.price ? b : a));
-      return {
-        store: 'Mercado Livre',
-        title: p.name,
-        price: cheapest.price,
-        oldPrice: cheapest.original_price ?? undefined,
-        // Página do produto no catálogo (mostra todas as ofertas).
-        url: `https://www.mercadolivre.com.br/p/${p.id}`,
-        image: p.pictures?.[0]?.url?.replace(/^http:/, 'https:'),
-        available: true,
-      };
-    }),
-  );
+  const offers = await mapLimit(search.body?.results ?? [], CONCURRENCY, async (p): Promise<Offer | undefined> => {
+    // 404 "No winners found" = produto sem vendedor ativo no momento.
+    const { status, body } = await get<{ results?: CatalogItem[] }>(`/products/${p.id}/items?limit=50`, token);
+    if (status !== 200) return undefined;
+    // As ofertas não vêm ordenadas por preço: procura a mais barata entre todas.
+    const items = (body?.results ?? []).filter((i) => i.condition !== 'used' && i.price > 0);
+    if (!items.length) return undefined;
+    const cheapest = items.reduce((a, b) => (b.price < a.price ? b : a));
+    return {
+      store: 'Mercado Livre',
+      title: p.name,
+      price: cheapest.price,
+      oldPrice: cheapest.original_price ?? undefined,
+      // Página do produto no catálogo (lista todas as ofertas, inclusive a mais barata).
+      url: `https://www.mercadolivre.com.br/p/${p.id}`,
+      image: p.pictures?.[0]?.url?.replace(/^http:/, 'https:'),
+      available: true,
+      units: detectUnits(p.name),
+      badges: badgesFor(cheapest),
+    };
+  });
   return offers.filter((o): o is Offer => o !== undefined);
 }

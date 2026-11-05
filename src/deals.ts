@@ -20,6 +20,33 @@ const STOPWORDS = new Set(['de', 'da', 'do', 'das', 'dos', 'e', 'com', 'para', '
 
 const tokens = (text: string) => normalize(text).split(' ').filter((t) => t && !STOPWORDS.has(t));
 
+const UNIT_WORDS =
+  'unidades|unidade|unid|un|latas|lata|pacotes|pacote|caixas|caixa|frascos|frasco|potes|pote|refis|refil|garrafas|garrafa|pecas|rolos|sachês|saches|sacos|fardos';
+
+/**
+ * Detecta quantas unidades o anúncio tem pelo título: "Kit 4 Latas", "Kit com 3",
+ * "6 unidades", "c/ 2 latas". Devolve 1 quando não encontra nada.
+ * Números com unidade de medida ("800g", "1kg") não contam como quantidade.
+ */
+export function detectUnits(title: string): number {
+  const t = normalize(title);
+  const patterns = [
+    new RegExp(`\\bkit (?:com |c )?(\\d{1,2})\\b`),
+    new RegExp(`\\b(\\d{1,2}) (?:${UNIT_WORDS})\\b`),
+    /\b(?:com|c) (\d{1,2}) (?:un|unid|unidades)\b/,
+  ];
+  for (const re of patterns) {
+    const n = Number(t.match(re)?.[1]);
+    if (n >= 2 && n <= 48) return n;
+  }
+  return 1;
+}
+
+/** Preço usado para comparar: total ou por unidade, conforme o produto monitorado. */
+export function effectivePrice(watch: Watch, offer: Offer): number {
+  return watch.compareUnitPrice && offer.units && offer.units > 1 ? offer.price / offer.units : offer.price;
+}
+
 /**
  * Filtra resultados de busca para manter só os que realmente são o produto:
  * todas as palavras da busca + obrigatórias no título, nenhuma palavra excluída,
@@ -31,8 +58,9 @@ export function filterRelevant(watch: Watch, offers: Offer[], fromSearch: boolea
 
   return offers.filter((o) => {
     if (!o.available) return false;
-    if (watch.minPrice && o.price < watch.minPrice) return false;
-    if (watch.maxPrice && o.price > watch.maxPrice) return false;
+    const price = effectivePrice(watch, o);
+    if (watch.minPrice && price < watch.minPrice) return false;
+    if (watch.maxPrice && price > watch.maxPrice) return false;
     const titleTokens = new Set(tokens(o.title));
     const title = ` ${normalize(o.title)} `;
     if (!required.every((w) => titleTokens.has(w))) return false;
@@ -54,11 +82,13 @@ export function referencePrice(history: PricePoint[], watchId: string): number |
 /** Decide se uma oferta é "interessante". Retorna o motivo, ou undefined. */
 export function dealReason(watch: Watch, offer: Offer, reference: number | undefined): string | undefined {
   const reasons: string[] = [];
-  if (watch.targetPrice && offer.price <= watch.targetPrice) {
-    reasons.push(`preço alvo de ${brl(watch.targetPrice)} atingido`);
+  const price = effectivePrice(watch, offer);
+  const per = watch.compareUnitPrice ? ' por unidade' : '';
+  if (watch.targetPrice && price <= watch.targetPrice) {
+    reasons.push(`preço alvo de ${brl(watch.targetPrice)}${per} atingido`);
   }
   if (watch.dropPercent && reference) {
-    const drop = ((reference - offer.price) / reference) * 100;
+    const drop = ((reference - price) / reference) * 100;
     if (drop >= watch.dropPercent) {
       reasons.push(`${drop.toFixed(0)}% abaixo da média recente (${brl(reference)})`);
     }

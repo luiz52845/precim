@@ -59,6 +59,14 @@
 
         <h2>Mercado Livre</h2>
         <div id="ml-box"></div>
+        <label>Link de afiliado do Mercado Livre
+          <input name="affiliate.mlParams" autocomplete="off" placeholder="cole um link de afiliado completo (com ?...) ou só os parâmetros" />
+        </label>
+        <p class="hint">
+          Depois de aprovado no Programa de Afiliados, gere o link de afiliado de qualquer produto no site do Mercado Livre e cole aqui.
+          O Precim guarda só os parâmetros que identificam você e os coloca em todos os links do Mercado Livre do painel e das notificações.
+          Links curtos (<code>meli.la/…</code>) não servem.
+        </p>
 
         <h2>Telegram</h2>
         <label class="check"><input type="checkbox" name="telegram.enabled" /> Enviar alertas pelo Telegram</label>
@@ -130,6 +138,8 @@
           <label>Queda de % na média <input name="dropPercent" inputmode="decimal" placeholder="ex.: 10" /></label>
         </div>
         <p class="hint">Avisa quando o preço chegar ao alvo <b>ou</b> ficar X% abaixo da média dos últimos 30 dias.</p>
+        <label class="check"><input type="checkbox" name="compareUnitPrice" /> Comparar pelo preço por unidade (kits)</label>
+        <p class="hint">Um “Kit 4 latas” por R$ 280 conta como R$ 70 por lata. Com isso marcado, preço alvo e faixa de preço passam a ser <b>por unidade</b>.</p>
       </fieldset>
 
       <label class="check"><input type="checkbox" name="active" checked /> Ativo (incluir nas verificações automáticas)</label>

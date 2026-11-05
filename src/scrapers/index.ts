@@ -1,3 +1,4 @@
+import { detectUnits } from '../deals.ts';
 import type { DbShape, Offer, ScrapeResult, StoreId, Watch } from '../types.ts';
 import { searchAmazon } from './amazon.ts';
 import { searchKabum } from './kabum.ts';
@@ -30,7 +31,8 @@ export async function scrapeWatch(watch: Watch, db: DbShape): Promise<ScrapeResu
   for (const [i, job] of jobs.entries()) {
     if (i > 0) await sleep(POLITE_DELAY_MS);
     try {
-      results.push({ source: job.source, offers: await job.run() });
+      const offers = (await job.run()).map((o) => ({ ...o, units: o.units ?? detectUnits(o.title) }));
+      results.push({ source: job.source, offers });
     } catch (err) {
       results.push({ source: job.source, offers: [], error: (err as Error).message });
     }

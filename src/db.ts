@@ -33,6 +33,7 @@ const defaultSettings = (): Settings => ({
     phone: process.env.WHATSAPP_PHONE ?? '',
     apiKey: process.env.WHATSAPP_APIKEY ?? '',
   },
+  affiliate: { mlParams: process.env.ML_AFFILIATE_PARAMS ?? '' },
 });
 
 function normalize(raw: Partial<DbShape> | null): DbShape {
@@ -48,6 +49,7 @@ function normalize(raw: Partial<DbShape> | null): DbShape {
       ...raw?.settings,
       telegram: { ...def.telegram, ...raw?.settings?.telegram },
       whatsapp: { ...def.whatsapp, ...raw?.settings?.whatsapp },
+      affiliate: { ...def.affiliate, ...raw?.settings?.affiliate },
     },
   };
 }

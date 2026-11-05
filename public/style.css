@@ -98,6 +98,9 @@ legend { font-size: .85rem; color: var(--muted); padding: 0 .3rem; }
 .card h3 { margin: 0; font-size: 1rem; }
 .card .price { font-size: 1.5rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 .card .best-title { font-size: .85rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card .best-title a { color: inherit; }
+.unit { font-size: .8rem; font-weight: 400; color: var(--muted); }
+.badges { display: flex; flex-wrap: wrap; gap: .25rem; margin-top: .25rem; }
 .card .actions { display: flex; gap: .4rem; flex-wrap: wrap; margin-top: auto; padding-top: .4rem; }
 .badge { display: inline-block; font-size: .75rem; padding: .1rem .5rem; border-radius: 99px; background: var(--bg); border: 1px solid var(--border); }
 .badge.good { background: var(--good-bg); color: var(--good); border-color: transparent; font-weight: 600; }

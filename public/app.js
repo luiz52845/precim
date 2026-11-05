@@ -62,6 +62,21 @@ document.querySelectorAll('.tab').forEach((btn) =>
 );
 
 // ---------- produtos ----------
+
+/** Preço usado na comparação: total ou por unidade (mesma regra do servidor). */
+const effPrice = (w, o) => (w.compareUnitPrice && o.units > 1 ? o.price / o.units : o.price);
+
+/** " · 4 un. · R$ 70,00/un." para kits. */
+const unitInfo = (o) =>
+  o.units > 1 ? ` <span class="unit">${o.units} un. · ${brl(o.price / o.units)}/un.</span>` : '';
+
+const badgesHtml = (o) =>
+  o.badges?.length
+    ? `<div class="badges">${o.badges
+        .map((b) => `<span class="badge ${b.startsWith('-') ? 'good' : ''}">${esc(b)}</span>`)
+        .join(' ')}</div>`
+    : '';
+
 async function refresh() {
   state = await api('/state');
   renderWatches();
@@ -74,7 +89,7 @@ function renderWatches() {
   list.innerHTML = state.watches
     .map((w) => {
       const best = w.best;
-      const hit = best && w.targetPrice && best.price <= w.targetPrice;
+      const hit = best && w.targetPrice && effPrice(w, best) <= w.targetPrice;
       const where = [w.query ? `busca “${esc(w.query)}” em ${w.stores.length} loja(s)` : '', w.urls.length ? `${w.urls.length} link(s)` : '']
         .filter(Boolean)
         .join(' + ');
@@ -82,10 +97,12 @@ function renderWatches() {
       <article class="card ${w.active ? '' : 'inactive'}" data-id="${w.id}">
         <h3>${esc(w.name)}</h3>
         <div class="muted">${where}</div>
-        <div class="price">${brl(best?.price)}</div>
-        ${best ? `<div class="best-title" title="${esc(best.title)}">${esc(best.store)} · ${esc(best.title)}</div>` : ''}
+        <div class="price">${brl(best?.price)}${best ? unitInfo(best) : ''}</div>
+        ${best ? `<div class="best-title" title="${esc(best.title)}"><a href="${esc(best.url)}" target="_blank" rel="noopener">${esc(best.store)} · ${esc(best.title)}</a></div>` : ''}
+        ${best ? badgesHtml(best) : ''}
         <div>
-          ${w.targetPrice ? `<span class="badge ${hit ? 'good' : ''}">alvo ${brl(w.targetPrice)}</span>` : ''}
+          ${w.targetPrice ? `<span class="badge ${hit ? 'good' : ''}">alvo ${brl(w.targetPrice)}${w.compareUnitPrice ? '/un.' : ''}</span>` : ''}
+          ${w.compareUnitPrice ? '<span class="badge">por unidade</span>' : ''}
           ${w.dropPercent ? `<span class="badge">queda ≥ ${w.dropPercent}%</span>` : ''}
           ${w.active ? '' : '<span class="badge">pausado</span>'}
         </div>
@@ -175,6 +192,7 @@ function openWatchForm(watch) {
   f.requiredWords.value = (watch?.requiredWords ?? []).join(', ');
   f.excludeWords.value = (watch?.excludeWords ?? ['capa', 'película', 'case', 'usado', 'recondicionado']).join(', ');
   for (const k of ['minPrice', 'maxPrice', 'targetPrice', 'dropPercent']) f[k].value = watch?.[k] ?? '';
+  f.compareUnitPrice.checked = Boolean(watch?.compareUnitPrice);
   f.active.checked = watch?.active ?? true;
   watchDialog.showModal();
 }
@@ -196,6 +214,7 @@ watchForm.addEventListener('submit', async (e) => {
     maxPrice: f.maxPrice.value,
     targetPrice: f.targetPrice.value,
     dropPercent: f.dropPercent.value,
+    compareUnitPrice: f.compareUnitPrice.checked,
     active: f.active.checked,
   };
   const btn = $('#btn-save');
@@ -221,7 +240,7 @@ async function openDetail(id) {
   const offers = report?.offers;
   $('#detail').innerHTML = `
     <h2>${esc(watch.name)}</h2>
-    <h3 class="muted">Histórico do menor preço</h3>
+    <h3 class="muted">Histórico do menor preço${watch.compareUnitPrice ? ' (por unidade)' : ''}</h3>
     ${chart(history, watch.targetPrice)}
     <h3 class="muted">Ofertas da última verificação ${report ? `(${when(report.at)})` : ''}</h3>
     ${
@@ -240,9 +259,11 @@ async function openDetail(id) {
                 .map(
                   (o) => `<tr>
                   <td>${o.image ? `<img src="${esc(o.image)}" alt="" loading="lazy">` : ''}</td>
-                  <td><a href="${esc(o.url)}" target="_blank" rel="noopener">${esc(o.title)}</a></td>
+                  <td><a href="${esc(o.url)}" target="_blank" rel="noopener">${esc(o.title)}</a>${badgesHtml(o)}</td>
                   <td>${esc(o.store)}</td>
-                  <td class="num"><b>${brl(o.price)}</b>${o.oldPrice > o.price ? `<br><s>${brl(o.oldPrice)}</s>` : ''}</td>
+                  <td class="num"><b>${brl(o.price)}</b>${o.oldPrice > o.price ? `<br><s>${brl(o.oldPrice)}</s>` : ''}${
+                    o.units > 1 ? `<br><span class="unit">${brl(o.price / o.units)}/un.</span>` : ''
+                  }</td>
                 </tr>`,
                 )
                 .join('')}</tbody></table></div>`
@@ -309,6 +330,7 @@ function fillSettings() {
   f['whatsapp.enabled'].checked = s.whatsapp.enabled;
   f['whatsapp.phone'].value = s.whatsapp.phone;
   f['whatsapp.apiKey'].value = s.whatsapp.apiKey;
+  f['affiliate.mlParams'].value = s.affiliate?.mlParams ?? '';
   $('#schedule-info').textContent = state.scheduleInfo;
   renderMl();
   setMsg('');
@@ -326,6 +348,7 @@ function readSettings() {
     intervalMinutes: Number(f.intervalMinutes.value),
     telegram: { enabled: f['telegram.enabled'].checked, botToken: f['telegram.botToken'].value, chatId: f['telegram.chatId'].value },
     whatsapp: { enabled: f['whatsapp.enabled'].checked, phone: f['whatsapp.phone'].value, apiKey: f['whatsapp.apiKey'].value },
+    affiliate: { mlParams: f['affiliate.mlParams'].value },
   };
 }
 

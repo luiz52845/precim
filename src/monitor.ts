@@ -1,5 +1,6 @@
 import { loadDb, mutate, newId } from './db.ts';
-import { brl, dealReason, filterRelevant, referencePrice } from './deals.ts';
+import { affiliateUrl } from './affiliate.ts';
+import { brl, dealReason, effectivePrice, filterRelevant, referencePrice } from './deals.ts';
 import { notifyAll } from './notify/index.ts';
 import { scrapeWatch } from './scrapers/index.ts';
 import type { Alert, CheckReport, DbShape, Offer, Watch } from './types.ts';
@@ -23,7 +24,9 @@ export async function checkWatch(db: DbShape, watch: Watch): Promise<CheckReport
     offers.push(...relevant);
     return { source: r.source, found: r.offers.length, relevant: relevant.length, error: r.error };
   });
-  offers.sort((a, b) => a.price - b.price);
+  // Preço de comparação: total, ou por unidade se o produto estiver nesse modo.
+  const price = (o: Offer) => effectivePrice(watch, o);
+  offers.sort((a, b) => price(a) - price(b));
   const best = offers[0];
 
   // Referência calculada ANTES de registrar o preço atual.
@@ -37,13 +40,13 @@ export async function checkWatch(db: DbShape, watch: Watch): Promise<CheckReport
     if (!reason) break; // ordenado por preço: se este não serve, os próximos também não
     const prev = db.notified[offer.url];
     const recent = prev && Date.now() - Date.parse(prev.at) < REALERT_AFTER_MS;
-    if (prev && offer.price >= prev.price && recent) continue;
+    if (prev && price(offer) >= prev.price && recent) continue;
 
-    const { sent, errors } = await notifyAll(db.settings, formatMessage(watch, offer, reason));
+    const { sent, errors } = await notifyAll(db.settings, formatMessage(watch, offer, reason, db));
     alerts.push({ id: newId(), watchId: watch.id, at, offer, reason, sent, errors });
     // Se o envio falhou, tenta de novo na próxima verificação; se não há canal
     // configurado, registra mesmo assim para não repetir o alerta a cada rodada.
-    if (sent.length || noChannel) notified[offer.url] = { price: offer.price, at };
+    if (sent.length || noChannel) notified[offer.url] = { price: price(offer), at };
     if (alerts.length >= 3) break; // no máximo 3 mensagens por verificação
   }
 
@@ -55,7 +58,7 @@ export async function checkWatch(db: DbShape, watch: Watch): Promise<CheckReport
     if (!w) return; // excluído durante a verificação
     w.lastCheckAt = at;
     w.lastError = errors.length ? errors.join(' | ') : undefined;
-    if (best) d.history.push({ watchId: w.id, at, price: best.price, store: best.store, title: best.title, url: best.url });
+    if (best) d.history.push({ watchId: w.id, at, price: price(best), store: best.store, title: best.title, url: best.url });
     d.alerts.push(...alerts);
     Object.assign(d.notified, notified);
     d.reports[w.id] = report;
@@ -63,16 +66,21 @@ export async function checkWatch(db: DbShape, watch: Watch): Promise<CheckReport
   return report;
 }
 
-function formatMessage(watch: Watch, offer: Offer, reason: string): string {
+function formatMessage(watch: Watch, offer: Offer, reason: string, db: DbShape): string {
   const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const old = offer.oldPrice && offer.oldPrice > offer.price ? ` <s>${brl(offer.oldPrice)}</s>` : '';
+  const unit = offer.units && offer.units > 1 ? ` (${offer.units} un. · ${brl(offer.price / offer.units)}/un.)` : '';
   return [
     `🔥 <b>Oferta: ${esc(watch.name)}</b>`,
     esc(offer.title),
-    `💰 <b>${brl(offer.price)}</b>${old} — ${esc(offer.store)}`,
+    `💰 <b>${brl(offer.price)}</b>${old}${unit} — ${esc(offer.store)}`,
+    offer.badges?.length ? `🏷️ ${esc(offer.badges.join(' · '))}` : '',
     `📉 ${esc(reason)}`,
-    offer.url,
-  ].join('\n');
+    // Link de afiliado (Mercado Livre), quando configurado.
+    affiliateUrl(offer.url, db.settings),
+  ]
+    .filter(Boolean)
+    .join('\n');
 }
 
 export interface BatchResult {

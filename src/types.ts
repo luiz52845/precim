@@ -23,6 +23,11 @@ export interface Watch {
   targetPrice?: number;
   /** Alerta quando o preço cair X% em relação à média histórica. */
   dropPercent?: number;
+  /**
+   * Compara pelo preço por unidade (kits de N unidades viram preço/N). Nesse modo,
+   * preço alvo, faixa de preço e histórico também passam a ser por unidade.
+   */
+  compareUnitPrice?: boolean;
   active: boolean;
   createdAt: string;
   lastCheckAt?: string;
@@ -39,6 +44,10 @@ export interface Offer {
   url: string;
   image?: string;
   available: boolean;
+  /** Quantidade de unidades detectada no título ("Kit 4 latas" -> 4). */
+  units?: number;
+  /** Destaques da oferta: frete grátis, Full, loja oficial... */
+  badges?: string[];
 }
 
 /** Registro do menor preço encontrado em uma verificação. */
@@ -66,6 +75,8 @@ export interface Settings {
   intervalMinutes: number;
   telegram: { enabled: boolean; botToken: string; chatId: string };
   whatsapp: { enabled: boolean; phone: string; apiKey: string };
+  /** Parâmetros do link de afiliado do Mercado Livre (ex.: "matt_tool=123&matt_word=abc"). */
+  affiliate: { mlParams: string };
 }
 
 export interface ScrapeResult {
