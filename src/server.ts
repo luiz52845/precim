@@ -5,6 +5,9 @@
 import app from './app.ts';
 import { checkBatch } from './monitor.ts';
 
+// Marca que estamos no seu PC: libera o gerador de links de afiliado (usa cookies locais).
+process.env.PRECIM_LOCAL = '1';
+
 const PORT = Number(process.env.PORT) || 3000;
 // Só escuta em localhost por padrão: o painel guarda tokens dos bots.
 const HOST = process.env.HOST || '127.0.0.1';

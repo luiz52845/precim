@@ -29,6 +29,17 @@ npm run build      # compila para dist/ (usado pela Vercel)
 
 Cada chamada verifica produtos por até ~40 segundos. Se houver muitos, os restantes ficam para a próxima chamada.
 
+## Links de afiliado do Mercado Livre (gerados no seu PC)
+
+O Mercado Livre não tem API oficial para gerar links de afiliado (`meli.la`). O botão **Gerar links de afiliado (ML)** faz o mesmo que o botão *Compartilhar* do site, usando os **cookies da sua sessão**. Por segurança, isso **só roda com o Precim no seu PC**: os cookies ficam em `ml-cookies.json` (fora do git) e nunca vão para a Vercel.
+
+1. No `.env`, preencha `APP_PASSWORD` e as credenciais do banco da Vercel, `KV_REST_API_URL` e `KV_REST_API_TOKEN`. Elas ficam em Vercel → precim → Storage → banco Upstash → aba `.env.local` → *Show secret*. Assim o Precim no PC usa os mesmos dados da Vercel.
+2. `npm start` e abra http://localhost:3000.
+3. Em **Configurações → Gerador automático de links**, cole os cookies do Mercado Livre exportados do Chrome (JSON de uma extensão de exportar cookies), com você logado.
+4. Na aba **Produtos**, clique em **Gerar links de afiliado (ML)**. Os links aparecem também em https://precim.vercel.app.
+
+Riscos: é uma rota não oficial (pode parar de funcionar se o site mudar) e automação pode contrariar as regras do programa de afiliados. Quando a sessão expirar, o gerador para e pede cookies novos.
+
 ## Como funciona
 
 1. **Adicione um produto** na interface:

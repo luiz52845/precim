@@ -193,6 +193,40 @@ $('#btn-check-all').addEventListener('click', async (e) => {
   await refresh();
 });
 
+$('#btn-gen-links').addEventListener('click', async (e) => {
+  const btn = e.currentTarget;
+  if (!state.generator?.local) {
+    $('#status').textContent =
+      'A geração automática só funciona com o Precim rodando no seu PC (npm start → http://localhost:3000).';
+    return;
+  }
+  if (!state.generator.cookies?.configured) {
+    $('#status').textContent = 'Cole antes os cookies do Mercado Livre em Configurações.';
+    openTab('config');
+    return;
+  }
+  btn.disabled = true;
+  btn.textContent = 'Gerando links… (pode levar alguns minutos)';
+  try {
+    const r = await api('/affiliate/generate', { method: 'POST' });
+    const parts = [`${r.generated.length} de ${r.total} link(s) gerado(s)`];
+    if (r.failed.length) parts.push(`${r.failed.length} falha(s): ${r.failed[0].error}`);
+    if (r.stopped) parts.push(`Parado: ${r.stopped}`);
+    if (!r.total) parts[0] = 'Todos os itens do Mercado Livre já têm link de afiliado';
+    $('#status').textContent = parts.join(' · ');
+  } catch (err) {
+    alertError(err);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Gerar links de afiliado (ML)';
+  }
+  await refresh();
+});
+
+function openTab(name) {
+  document.querySelector(`.tab[data-tab="${name}"]`).click();
+}
+
 // ---------- formulário de produto ----------
 const watchDialog = $('#watch-dialog');
 const watchForm = $('#watch-form');
@@ -414,6 +448,7 @@ function fillSettings() {
   f['affiliate.mlParams'].value = s.affiliate?.mlParams ?? '';
   $('#schedule-info').textContent = state.scheduleInfo;
   renderMl();
+  renderGenerator();
   setMsg('');
 }
 
@@ -422,6 +457,42 @@ function renderMl() {
     ? "<p class=\"msg ok\">✔ Mercado Livre configurado. Marque a loja ao adicionar um produto.</p>"
     : "<p class=\"hint\">Defina <code>ML_CLIENT_ID</code> e <code>ML_CLIENT_SECRET</code> nas variáveis de ambiente (Dev Center do Mercado Livre) e faça um novo deploy.</p>";
 }
+
+function renderGenerator() {
+  const g = state.generator;
+  if (!g?.local) {
+    $('#gen-box').innerHTML = `<p class="hint">Disponível só com o Precim rodando no seu PC (<code>npm start</code> →
+      <code>http://localhost:3000</code>). Os cookies da sua conta do Mercado Livre ficam no seu computador e nunca vão para a Vercel.</p>`;
+    return;
+  }
+  $('#gen-box').innerHTML = `
+    <p class="${g.cookies.configured ? 'msg ok' : 'hint'}">${
+      g.cookies.configured
+        ? `✔ Cookies salvos no seu PC (${g.cookies.count} cookies, ${when(g.cookies.savedAt)}).`
+        : 'Cookies ainda não configurados.'
+    }</p>
+    <p class="hint">
+      1) No Chrome, entre em <b>mercadolivre.com.br</b> logado na sua conta de afiliado.
+      2) Com uma extensão de exportar cookies em JSON (ex.: <b>“Export cookie JSON file”</b>, da Chrome Web Store), exporte os cookies da página.
+      3) Abra o arquivo baixado, copie tudo e cole abaixo. Refaça quando o gerador avisar que a sessão expirou.
+    </p>
+    <textarea id="gen-cookies" rows="3" placeholder='[{"name": "...", "value": "...", ...}]'></textarea>
+    <div class="toolbar"><button type="button" id="btn-save-cookies">Salvar cookies</button></div>
+    <p class="hint">⚠ Os cookies dão acesso à sua conta do Mercado Livre. Ficam só em <code>ml-cookies.json</code> nesta pasta (fora do git).
+      A geração usa uma rota não oficial do site e pode parar de funcionar se o Mercado Livre mudar.</p>`;
+}
+
+$('#gen-box').addEventListener('click', async (e) => {
+  if (e.target.id !== 'btn-save-cookies') return;
+  try {
+    const r = await api('/local/ml-cookies', { method: 'PUT', body: { cookies: $('#gen-cookies').value } });
+    await refresh();
+    renderGenerator();
+    setMsg(`${r.count} cookies salvos no seu PC.`, 'ok');
+  } catch (err) {
+    setMsg(err.message, 'error');
+  }
+});
 
 function readSettings() {
   const f = settingsForm.elements;

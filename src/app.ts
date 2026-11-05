@@ -7,6 +7,13 @@ import { checkBatch, checkWatch } from './monitor.ts';
 import { notifyAll, telegramChats } from './notify/index.ts';
 import { STORES } from './scrapers/index.ts';
 import { mlConfigured } from './scrapers/mercadolivre.ts';
+import {
+  MlSessionError,
+  cookiesStatus,
+  createMlAffiliateLink,
+  isLocal,
+  saveCookies,
+} from './ml-affiliate-generator.ts';
 import { isMercadoLivreUrl, parseAffiliateInput, validateProductAffiliateLink, withAffiliate } from './affiliate.ts';
 import type { CheckReport, DbShape, Settings, StoreId, Watch } from './types.ts';
 
@@ -145,6 +152,7 @@ app.get(
       storage: storageKind,
       authEnabled: authEnabled(),
       ml: { configured: mlConfigured() },
+      generator: { local: isLocal(), cookies: cookiesStatus() },
     });
   }),
 );
@@ -295,6 +303,74 @@ app.put(
       else delete d.affiliateLinks[productUrl];
     });
     res.json({ productUrl, link });
+  }),
+);
+
+// ---------- gerador de links de afiliado (só no seu PC) ----------
+
+app.put(
+  '/api/local/ml-cookies',
+  h(async (req, res) => {
+    try {
+      const count = saveCookies(String(req.body?.cookies ?? ''));
+      res.json({ ok: true, count });
+    } catch (err) {
+      throw new BadRequest((err as Error).message);
+    }
+  }),
+);
+
+/** Pausa entre links gerados, para não sobrecarregar o Mercado Livre. */
+const GENERATE_DELAY_MS = 2500;
+
+/**
+ * Gera o link meli.la de todas as ofertas do Mercado Livre (da última verificação de
+ * cada produto) que ainda não têm link de afiliado. Grava cada link assim que gerado.
+ */
+app.post(
+  '/api/affiliate/generate',
+  h(async (req, res) => {
+    if (!isLocal()) {
+      throw new BadRequest('a geração automática de links só funciona com o Precim rodando no seu PC (npm start)');
+    }
+    const db = await loadDb();
+    const tag = new URLSearchParams(db.settings.affiliate.mlParams).get('matt_word');
+    if (!tag) throw new BadRequest('salve primeiro o seu link de afiliado em Configurações (para obter a sua tag)');
+
+    const watchId = req.body?.watchId ? String(req.body.watchId) : undefined;
+    const urls = new Set<string>();
+    for (const [id, report] of Object.entries(db.reports)) {
+      if (watchId && id !== watchId) continue;
+      for (const o of report.offers) {
+        if (isMercadoLivreUrl(o.url) && !db.affiliateLinks[o.url]) urls.add(o.url);
+      }
+    }
+
+    const generated: { url: string; link: string }[] = [];
+    const failed: { url: string; error: string }[] = [];
+    let stopped: string | undefined;
+    for (const url of urls) {
+      if (generated.length || failed.length) await new Promise((r) => setTimeout(r, GENERATE_DELAY_MS));
+      try {
+        const link = await createMlAffiliateLink(url, tag);
+        await mutate((d) => {
+          d.affiliateLinks[url] = link;
+        });
+        generated.push({ url, link });
+        console.log(`link de afiliado: ${url} -> ${link}`);
+      } catch (err) {
+        if (err instanceof MlSessionError) {
+          stopped = err.message;
+          break;
+        }
+        failed.push({ url, error: (err as Error).message });
+        if (failed.length >= 3 && !generated.length) {
+          stopped = 'as 3 primeiras tentativas falharam; parei para não insistir';
+          break;
+        }
+      }
+    }
+    res.json({ total: urls.size, generated, failed, stopped, remaining: urls.size - generated.length - failed.length });
   }),
 );
 

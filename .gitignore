@@ -4,3 +4,6 @@ dist/
 .env
 .env*.local
 .vercel/
+
+# Cookies da sua sessão do Mercado Livre (gerador de links local). NUNCA commitar.
+ml-cookies.json
