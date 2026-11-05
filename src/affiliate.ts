@@ -20,20 +20,23 @@ export function parseAffiliateInput(input: string): string {
     const url = new URL(text);
     if (!url.search) {
       throw new Error(
-        'esse link não tem parâmetros de afiliado (links curtos como meli.la não dão para reaproveitar). ' +
-          'Gere o link de afiliado de um produto e cole o link completo, com "?" e os parâmetros.',
+        'esse link não tem parâmetros de afiliado. Se for um link curto (meli.la), abra-o no navegador ' +
+          'e cole aqui o endereço completo para onde ele leva (com "?matt_word=...").',
       );
     }
     params = url.searchParams;
   } else {
     params = new URLSearchParams(text.replace(/^\?/, ''));
   }
-  // Remove parâmetros de navegação que não identificam o afiliado.
-  for (const key of ['pdp_filters', 'searchVariation', 'position', 'search_layout', 'type', 'tracking_id']) {
-    params.delete(key);
+  // Só os parâmetros "matt_*" identificam o afiliado (matt_word, matt_tool). Os outros
+  // são de navegação ou específicos de um produto (ex.: "ref", criptografado, vale só
+  // para o produto em que o link foi gerado) e não podem ir para outros produtos.
+  const kept = new URLSearchParams();
+  for (const [k, v] of params) if (/^matt_/i.test(k) && v) kept.set(k, v);
+  if (![...kept.keys()].length) {
+    throw new Error('não encontrei o seu identificador de afiliado (parâmetro matt_word ou matt_tool) nesse link');
   }
-  if (![...params.keys()].length) throw new Error('não encontrei parâmetros de afiliado nesse texto');
-  return params.toString();
+  return kept.toString();
 }
 
 export function isMercadoLivreUrl(url: string): boolean {

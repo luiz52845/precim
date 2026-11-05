@@ -77,6 +77,22 @@ const badgesHtml = (o) =>
         .join(' ')}</div>`
     : '';
 
+// Botões "Copiar link" (cartões e lista de ofertas). Os links já vêm com o afiliado.
+document.addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-copy]');
+  if (!btn) return;
+  e.stopPropagation();
+  const old = btn.textContent;
+  try {
+    await navigator.clipboard.writeText(btn.dataset.copy);
+    btn.textContent = 'Copiado!';
+  } catch {
+    // Sem permissão de área de transferência: mostra o link para copiar à mão.
+    window.prompt('Copie o link:', btn.dataset.copy);
+  }
+  setTimeout(() => (btn.textContent = old), 1500);
+});
+
 async function refresh() {
   state = await api('/state');
   renderWatches();
@@ -109,6 +125,7 @@ function renderWatches() {
         <div class="muted">Verificado: ${when(w.lastCheckAt)}</div>
         ${w.lastError ? `<div class="error-box">⚠ ${esc(w.lastError)}</div>` : ''}
         <div class="actions">
+          ${best ? `<button class="small" data-copy="${esc(best.url)}">Copiar link</button>` : ''}
           <button class="small" data-act="detail">Ver ofertas</button>
           <button class="small" data-act="check">Verificar</button>
           <button class="small" data-act="edit">Editar</button>
@@ -259,7 +276,8 @@ async function openDetail(id) {
                 .map(
                   (o) => `<tr>
                   <td>${o.image ? `<img src="${esc(o.image)}" alt="" loading="lazy">` : ''}</td>
-                  <td><a href="${esc(o.url)}" target="_blank" rel="noopener">${esc(o.title)}</a>${badgesHtml(o)}</td>
+                  <td><a href="${esc(o.url)}" target="_blank" rel="noopener">${esc(o.title)}</a>${badgesHtml(o)}
+                    <button class="small" data-copy="${esc(o.url)}">Copiar link</button></td>
                   <td>${esc(o.store)}</td>
                   <td class="num"><b>${brl(o.price)}</b>${o.oldPrice > o.price ? `<br><s>${brl(o.oldPrice)}</s>` : ''}${
                     o.units > 1 ? `<br><span class="unit">${brl(o.price / o.units)}/un.</span>` : ''
