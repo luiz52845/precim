@@ -23,6 +23,8 @@ const SHORT_HOSTS = /^meli\.la$/;
 export function parseAffiliateInput(input: string): string {
   const text = input.trim();
   if (!text) return '';
+  // Só a etiqueta (como aparece em "Etiqueta em uso" no ML): "luizfernandes91".
+  if (/^[\w.-]+$/.test(text)) return new URLSearchParams({ matt_word: text }).toString();
   let params: URLSearchParams;
   if (/^https?:\/\//i.test(text)) {
     const url = new URL(text);

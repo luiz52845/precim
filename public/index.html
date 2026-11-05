@@ -18,135 +18,122 @@
   </main>
 
   <div id="app" hidden>
-  <header class="topbar">
-    <h1>Precim</h1>
-    <nav>
-      <button class="tab active" data-tab="produtos">Produtos</button>
-      <button class="tab" data-tab="alertas">Alertas</button>
-      <button class="tab" data-tab="config">Configurações</button>
-    </nav>
-    <span id="status" class="muted"></span>
-    <button id="btn-logout" class="small" hidden>Sair</button>
-  </header>
+    <header class="topbar">
+      <h1>Precim</h1>
+      <nav>
+        <button class="tab active" data-tab="produtos">Produtos</button>
+        <button class="tab" data-tab="alertas">Alertas</button>
+        <button class="tab" data-tab="config">Configurações</button>
+      </nav>
+      <button id="btn-logout" class="link" hidden>Sair</button>
+    </header>
 
-  <main>
-    <!-- PRODUTOS -->
-    <section id="tab-produtos">
-      <div class="toolbar">
-        <button id="btn-new" class="primary">+ Adicionar produto</button>
-        <button id="btn-check-all">Verificar todos agora</button>
-        <button id="btn-gen-links">Gerar links de afiliado (ML)</button>
-      </div>
-      <div id="watch-list" class="cards"></div>
-      <p id="empty" class="empty" hidden>
-        Nenhum produto ainda. Clique em <b>Adicionar produto</b> e informe o que você quer acompanhar.
-      </p>
-    </section>
-
-    <!-- ALERTAS -->
-    <section id="tab-alertas" hidden>
-      <div id="alert-list"></div>
-    </section>
-
-    <!-- CONFIGURAÇÕES -->
-    <section id="tab-config" hidden>
-      <form id="settings-form" class="panel">
-        <h2>Verificação automática</h2>
-        <label>Intervalo (minutos)
-          <input type="number" name="intervalMinutes" min="5" step="1" required />
-        </label>
-        <p class="hint">Mínimo 5 min. Intervalos curtos aumentam a chance de as lojas bloquearem o acesso.</p>
-        <p class="hint" id="schedule-info"></p>
-
-        <h2>Mercado Livre</h2>
-        <div id="ml-box"></div>
-        <label>Link de afiliado do Mercado Livre
-          <input name="affiliate.mlParams" autocomplete="off" placeholder="cole um link de afiliado completo (com ?...) ou só os parâmetros" />
-        </label>
-        <p class="hint">
-          Depois de aprovado no Programa de Afiliados, gere o link de afiliado de qualquer produto no site do Mercado Livre e cole aqui.
-          O Precim guarda só os parâmetros que identificam você e os coloca em todos os links do Mercado Livre do painel e das notificações.
-          Se o link for curto (<code>meli.la/…</code>), abra no navegador e cole o endereço completo para onde ele leva.
-        </p>
-
-        <h3>Gerador automático de links (no seu PC)</h3>
-        <div id="gen-box"></div>
-
-        <h2>Telegram</h2>
-        <label class="check"><input type="checkbox" name="telegram.enabled" /> Enviar alertas pelo Telegram</label>
-        <label>Token do bot <input name="telegram.botToken" autocomplete="off" placeholder="123456:ABC..." /></label>
-        <label>Chat ID
-          <span class="row">
-            <input name="telegram.chatId" placeholder="ex.: 123456789" />
-            <button type="button" id="btn-find-chat">Descobrir</button>
-          </span>
-        </label>
-        <p class="hint">
-          1) No Telegram, fale com <b>@BotFather</b>, envie <code>/newbot</code> e copie o token.
-          2) Abra o seu bot e mande qualquer mensagem. 3) Clique em <b>Descobrir</b>.
-        </p>
-
-        <h2>WhatsApp (CallMeBot)</h2>
-        <label class="check"><input type="checkbox" name="whatsapp.enabled" /> Enviar alertas pelo WhatsApp</label>
-        <label>Seu número (com DDI) <input name="whatsapp.phone" placeholder="+5511999999999" /></label>
-        <label>API key <input name="whatsapp.apiKey" autocomplete="off" /></label>
-        <p class="hint">
-          Serviço gratuito para uso pessoal. Siga as instruções em
-          <code>callmebot.com/blog/free-api-whatsapp-messages</code> para autorizar o seu número e receber a API key.
-        </p>
-
+    <main>
+      <!-- PRODUTOS -->
+      <section id="tab-produtos">
         <div class="toolbar">
-          <button class="primary" type="submit">Salvar</button>
-          <button type="button" id="btn-test">Enviar mensagem de teste</button>
+          <button id="btn-new" class="primary">+ Adicionar produto</button>
+          <button id="btn-update">↻ Atualizar ofertas</button>
+          <span id="status" class="muted"></span>
         </div>
-        <p id="settings-msg" class="msg"></p>
-      </form>
-    </section>
-  </main>
+        <div id="watch-list" class="cards"></div>
+        <p id="empty" class="empty" hidden>
+          Nenhum produto ainda. Clique em <b>+ Adicionar produto</b> e diga o que você quer acompanhar.
+        </p>
+      </section>
+
+      <!-- ALERTAS -->
+      <section id="tab-alertas" hidden>
+        <div id="alert-list"></div>
+      </section>
+
+      <!-- CONFIGURAÇÕES -->
+      <section id="tab-config" hidden>
+        <form id="settings-form" class="settings">
+          <section class="panel">
+            <h2>Afiliado do Mercado Livre</h2>
+            <label>Sua etiqueta de afiliado
+              <input name="affiliateTag" autocomplete="off" placeholder="ex.: luizfernandes91" />
+            </label>
+            <p class="hint">A mesma que aparece em “Etiqueta em uso” ao clicar em Compartilhar no Mercado Livre.</p>
+            <div id="ml-warning"></div>
+            <div id="gen-box"></div>
+          </section>
+
+          <section class="panel">
+            <h2>Notificações</h2>
+            <details>
+              <summary>Telegram <span id="tg-state" class="muted"></span></summary>
+              <label class="check"><input type="checkbox" name="telegram.enabled" /> Enviar alertas pelo Telegram</label>
+              <label>Token do bot <input name="telegram.botToken" autocomplete="off" placeholder="123456:ABC..." /></label>
+              <label>Chat ID
+                <span class="row">
+                  <input name="telegram.chatId" placeholder="ex.: 123456789" />
+                  <button type="button" id="btn-find-chat">Descobrir</button>
+                </span>
+              </label>
+              <p class="hint">No Telegram, fale com <b>@BotFather</b>, envie <code>/newbot</code> e copie o token.
+                Mande qualquer mensagem para o seu bot e clique em <b>Descobrir</b>.</p>
+            </details>
+            <details>
+              <summary>WhatsApp <span id="wa-state" class="muted"></span></summary>
+              <label class="check"><input type="checkbox" name="whatsapp.enabled" /> Enviar alertas pelo WhatsApp</label>
+              <label>Seu número (com DDI) <input name="whatsapp.phone" placeholder="+5511999999999" /></label>
+              <label>API key do CallMeBot <input name="whatsapp.apiKey" autocomplete="off" /></label>
+              <p class="hint">Gratuito para uso pessoal: siga <code>callmebot.com/blog/free-api-whatsapp-messages</code> para receber a API key.</p>
+            </details>
+            <button type="button" id="btn-test" class="link">Enviar mensagem de teste</button>
+          </section>
+
+          <section class="panel">
+            <h2>Verificação automática</h2>
+            <label>Verificar a cada (minutos)
+              <input type="number" name="intervalMinutes" min="5" step="1" required />
+            </label>
+            <p class="hint" id="schedule-info"></p>
+          </section>
+
+          <div class="toolbar">
+            <button class="primary" type="submit">Salvar configurações</button>
+            <span id="settings-msg" class="msg"></span>
+          </div>
+        </form>
+      </section>
+    </main>
   </div>
 
   <!-- Formulário de produto -->
   <dialog id="watch-dialog">
     <form id="watch-form" method="dialog">
       <h2 id="watch-form-title">Adicionar produto</h2>
-      <label>Nome <input name="name" placeholder="ex.: iPhone 15 128GB" /></label>
-
-      <fieldset>
-        <legend>Buscar nas lojas</legend>
-        <label>Termo de busca <input name="query" placeholder="ex.: iphone 15 128gb" /></label>
-        <div id="store-checks" class="row wrap"></div>
-      </fieldset>
-
-      <fieldset>
-        <legend>…e/ou acompanhar links específicos</legend>
-        <label>Links de produto (um por linha)
-          <textarea name="urls" rows="3" placeholder="https://loja.com.br/produto/..."></textarea>
+      <label>O que você quer acompanhar?
+        <input name="query" placeholder="ex.: aptanutri premium 3" />
+      </label>
+      <div id="store-checks" class="row wrap"></div>
+      <div class="row">
+        <label>Avisar quando custar até (R$)
+          <input name="targetPrice" inputmode="decimal" placeholder="opcional" />
         </label>
-        <p class="hint">Funciona com lojas que publicam o preço em dados estruturados e não bloqueiam acesso automatizado.</p>
-      </fieldset>
+        <label>Nome no painel
+          <input name="name" placeholder="opcional" />
+        </label>
+      </div>
+      <label class="check"><input type="checkbox" name="compareUnitPrice" /> Comparar pelo preço por unidade (kits: “Kit 4 latas” = preço ÷ 4)</label>
 
-      <fieldset>
-        <legend>Filtros (para descartar acessórios e produtos parecidos)</legend>
-        <label>Palavras obrigatórias <input name="requiredWords" placeholder="ex.: 128gb" /></label>
-        <label>Palavras excluídas <input name="excludeWords" placeholder="ex.: capa, película, case, usado" /></label>
+      <details>
+        <summary>Opções avançadas</summary>
+        <label>O título precisa conter <input name="requiredWords" placeholder="ex.: 128gb, premium" /></label>
+        <label>Ignorar títulos com <input name="excludeWords" placeholder="ex.: capa, película, usado" /></label>
         <div class="row">
           <label>Preço mínimo <input name="minPrice" inputmode="decimal" /></label>
           <label>Preço máximo <input name="maxPrice" inputmode="decimal" /></label>
+          <label>Avisar se cair % <input name="dropPercent" inputmode="decimal" placeholder="ex.: 10" /></label>
         </div>
-      </fieldset>
-
-      <fieldset>
-        <legend>Quando avisar</legend>
-        <div class="row">
-          <label>Preço alvo (R$) <input name="targetPrice" inputmode="decimal" placeholder="ex.: 3500" /></label>
-          <label>Queda de % na média <input name="dropPercent" inputmode="decimal" placeholder="ex.: 10" /></label>
-        </div>
-        <p class="hint">Avisa quando o preço chegar ao alvo <b>ou</b> ficar X% abaixo da média dos últimos 30 dias.</p>
-        <label class="check"><input type="checkbox" name="compareUnitPrice" /> Comparar pelo preço por unidade (kits)</label>
-        <p class="hint">Um “Kit 4 latas” por R$ 280 conta como R$ 70 por lata. Com isso marcado, preço alvo e faixa de preço passam a ser <b>por unidade</b>.</p>
-      </fieldset>
-
-      <label class="check"><input type="checkbox" name="active" checked /> Ativo (incluir nas verificações automáticas)</label>
+        <label>Links de produto específicos (um por linha)
+          <textarea name="urls" rows="2" placeholder="https://loja.com.br/produto/..."></textarea>
+        </label>
+        <label class="check"><input type="checkbox" name="active" checked /> Incluir nas verificações automáticas</label>
+      </details>
 
       <p id="watch-msg" class="msg"></p>
       <div class="toolbar end">
@@ -156,7 +143,7 @@
     </form>
   </dialog>
 
-  <!-- Detalhes -->
+  <!-- Ofertas de um produto -->
   <dialog id="detail-dialog" class="wide">
     <div id="detail"></div>
     <div class="toolbar end"><button id="btn-close-detail">Fechar</button></div>

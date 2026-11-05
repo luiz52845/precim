@@ -15,7 +15,9 @@ export async function searchAmazon(query: string): Promise<Offer[]> {
   const offers: Offer[] = [];
   $('div[data-component-type="s-search-result"]').each((_, el) => {
     const item = $(el);
-    const title = (item.find('h2').attr('aria-label') || item.find('h2').text()).trim();
+    const title = (item.find('h2').attr('aria-label') || item.find('h2').text())
+      .replace(/^\s*an[uú]ncio patrocinado\s*[–—-]\s*/i, '') // remove o rótulo de anúncio
+      .trim();
     const price = parsePrice(item.find('.a-price:not(.a-text-price) .a-offscreen').first().text());
     const asin = item.attr('data-asin');
     if (!title || !price || !asin) return;

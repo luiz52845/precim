@@ -18,16 +18,14 @@ async function api(path, opts = {}) {
   return data;
 }
 
+let state = { watches: [], stores: [], settings: null };
+const setStatus = (text) => ($('#status').textContent = text);
+
 // ---------- login ----------
 function showLogin() {
   $('#app').hidden = true;
   $('#login-screen').hidden = false;
   $('#login-form').elements.password.focus();
-}
-
-function showApp() {
-  $('#login-screen').hidden = true;
-  $('#app').hidden = false;
 }
 
 $('#login-form').addEventListener('submit', async (e) => {
@@ -49,50 +47,57 @@ $('#btn-logout').addEventListener('click', async () => {
   showLogin();
 });
 
-let state = { watches: [], stores: [], settings: null };
-
 // ---------- abas ----------
-document.querySelectorAll('.tab').forEach((btn) =>
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('active', b === btn));
-    for (const t of ['produtos', 'alertas', 'config']) $(`#tab-${t}`).hidden = t !== btn.dataset.tab;
-    if (btn.dataset.tab === 'alertas') loadAlerts();
-    if (btn.dataset.tab === 'config') fillSettings();
-  }),
-);
+function openTab(name) {
+  document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === name));
+  for (const t of ['produtos', 'alertas', 'config']) $(`#tab-${t}`).hidden = t !== name;
+  if (name === 'alertas') loadAlerts();
+  if (name === 'config') fillSettings();
+}
+document.querySelectorAll('.tab').forEach((btn) => btn.addEventListener('click', () => openTab(btn.dataset.tab)));
 
-// ---------- produtos ----------
+// ---------- peças reutilizadas ----------
 
 /** Preço usado na comparação: total ou por unidade (mesma regra do servidor). */
 const effPrice = (w, o) => (w.compareUnitPrice && o.units > 1 ? o.price / o.units : o.price);
+const unitLine = (o) => (o.units > 1 ? `<span class="unit">${o.units} un. · ${brl(o.price / o.units)}/un.</span>` : '');
+const thumb = (o) =>
+  o?.image ? `<img class="thumb" src="${esc(o.image)}" alt="" loading="lazy">` : '<span class="thumb empty-thumb">🛒</span>';
+const tags = (list) => (list.length ? `<div class="tags">${list.join('')}</div>` : '');
+const offerBadges = (o) =>
+  (o.badges ?? []).map((b) => `<span class="badge ${b.startsWith('-') ? 'good' : ''}">${esc(b)}</span>`);
 
-/** " · 4 un. · R$ 70,00/un." para kits. */
-const unitInfo = (o) =>
-  o.units > 1 ? ` <span class="unit">${o.units} un. · ${brl(o.price / o.units)}/un.</span>` : '';
+/** Oferta do Mercado Livre? (só elas têm link de afiliado) */
+const isMl = (o) => o.hasAffiliateLink !== undefined;
+const pendingText = () =>
+  state.generator?.local
+    ? 'Link de afiliado pendente: clique em ↻ Atualizar ofertas'
+    : 'Link de afiliado pendente: gere no Precim do seu PC';
 
-const badgesHtml = (o) =>
-  o.badges?.length
-    ? `<div class="badges">${o.badges
-        .map((b) => `<span class="badge ${b.startsWith('-') ? 'good' : ''}">${esc(b)}</span>`)
-        .join(' ')}</div>`
-    : '';
+/** Campo com o link (de afiliado, quando houver) e botão Copiar. */
+function linkBox(o) {
+  if (isMl(o) && !o.hasAffiliateLink) return `<div class="pending">${pendingText()}</div>`;
+  return `<div class="linkbox">
+    <input readonly value="${esc(o.url)}" aria-label="Link" onclick="this.select()">
+    <button class="primary" data-copy="${esc(o.url)}">Copiar</button>
+  </div>`;
+}
 
-// Botões "Copiar link" (cartões e lista de ofertas). Os links já vêm com o afiliado.
+// Botões "Copiar": copiam o link (já com o afiliado).
 document.addEventListener('click', async (e) => {
   const btn = e.target.closest('[data-copy]');
   if (!btn) return;
-  e.stopPropagation();
   const old = btn.textContent;
   try {
     await navigator.clipboard.writeText(btn.dataset.copy);
     btn.textContent = 'Copiado!';
   } catch {
-    // Sem permissão de área de transferência: mostra o link para copiar à mão.
     window.prompt('Copie o link:', btn.dataset.copy);
   }
   setTimeout(() => (btn.textContent = old), 1500);
 });
 
+// ---------- produtos ----------
 async function refresh() {
   state = await api('/state');
   renderWatches();
@@ -100,134 +105,98 @@ async function refresh() {
 }
 
 function renderWatches() {
-  const list = $('#watch-list');
   $('#empty').hidden = state.watches.length > 0;
-  list.innerHTML = state.watches
-    .map((w) => {
-      const best = w.best;
-      const hit = best && w.targetPrice && effPrice(w, best) <= w.targetPrice;
-      const where = [w.query ? `busca “${esc(w.query)}” em ${w.stores.length} loja(s)` : '', w.urls.length ? `${w.urls.length} link(s)` : '']
-        .filter(Boolean)
-        .join(' + ');
-      return `
-      <article class="card ${w.active ? '' : 'inactive'}" data-id="${w.id}">
-        <h3>${esc(w.name)}</h3>
-        <div class="muted">${where}</div>
-        <div class="price">${brl(best?.price)}${best ? unitInfo(best) : ''}</div>
-        ${best ? `<div class="best-title" title="${esc(best.title)}"><a href="${esc(best.url)}" target="_blank" rel="noopener">${esc(best.store)} · ${esc(best.title)}</a></div>` : ''}
-        ${best ? badgesHtml(best) : ''}
+  $('#watch-list').innerHTML = state.watches.map(cardHtml).join('');
+}
+
+function cardHtml(w) {
+  const best = w.best;
+  const hit = best && w.targetPrice && effPrice(w, best) <= w.targetPrice;
+  const body = best
+    ? `${tags([hit ? '<span class="badge good">🎯 no preço alvo</span>' : '', ...offerBadges(best)].filter(Boolean))}
+       ${linkBox(best)}`
+    : `<div class="${w.failed ? 'warn' : 'pending'}">${
+        w.failed ? 'Nenhuma loja respondeu na última busca. Tente ↻ Atualizar ofertas.' : 'Ainda sem ofertas: clique em ↻ Atualizar ofertas.'
+      }</div>`;
+  return `
+    <article class="card ${w.active ? '' : 'inactive'}" data-id="${w.id}">
+      <div class="card-head">
+        ${thumb(best)}
         <div>
-          ${w.targetPrice ? `<span class="badge ${hit ? 'good' : ''}">alvo ${brl(w.targetPrice)}${w.compareUnitPrice ? '/un.' : ''}</span>` : ''}
-          ${w.compareUnitPrice ? '<span class="badge">por unidade</span>' : ''}
-          ${w.dropPercent ? `<span class="badge">queda ≥ ${w.dropPercent}%</span>` : ''}
-          ${w.active ? '' : '<span class="badge">pausado</span>'}
+          <h3>${esc(w.name)}</h3>
+          ${best ? `<div class="offer-title" title="${esc(best.title)}">${esc(best.store)} · ${esc(best.title)}</div>` : ''}
         </div>
-        <div class="muted">Verificado: ${when(w.lastCheckAt)}</div>
-        ${w.lastError ? `<div class="error-box">⚠ ${esc(w.lastError)}</div>` : ''}
-        <div class="actions">
-          ${
-            !best
-              ? ''
-              : best.hasAffiliateLink === false
-                ? `<button class="small primary" data-act="detail">Gerar link de afiliado</button>`
-                : `<button class="small" data-copy="${esc(best.url)}">Copiar link</button>`
-          }
-          <button class="small" data-act="detail">Ver ofertas</button>
-          <button class="small" data-act="check">Verificar</button>
-          <button class="small" data-act="edit">Editar</button>
-          <button class="small danger" data-act="delete">Excluir</button>
-        </div>
-      </article>`;
-    })
-    .join('');
+        <div class="price">${brl(best?.price)}${best ? unitLine(best) : ''}</div>
+      </div>
+      ${body}
+      <div class="card-foot">
+        <button class="link" data-act="detail">Ofertas${w.offersCount ? ` (${w.offersCount})` : ''}</button>
+        <button class="link" data-act="edit">Editar</button>
+        <button class="link danger" data-act="delete">Excluir</button>
+      </div>
+    </article>`;
 }
 
 $('#watch-list').addEventListener('click', async (e) => {
   const btn = e.target.closest('button[data-act]');
   if (!btn) return;
   const id = btn.closest('.card').dataset.id;
-  const watch = state.watches.find((w) => w.id === id);
   const act = btn.dataset.act;
-
-  if (act === 'edit') return openWatchForm(watch);
+  if (act === 'edit') return openWatchForm(state.watches.find((w) => w.id === id));
   if (act === 'detail') return openDetail(id);
   if (act === 'delete') {
-    // confirm() pode ser bloqueado em alguns contextos; usa confirmação no próprio botão.
+    // Confirmação no próprio botão (sem janelas do navegador).
     if (btn.dataset.confirm !== '1') {
       btn.dataset.confirm = '1';
-      btn.textContent = 'Confirmar exclusão';
-      setTimeout(() => { btn.dataset.confirm = ''; btn.textContent = 'Excluir'; }, 3000);
+      btn.textContent = 'Clique de novo para excluir';
+      setTimeout(() => {
+        btn.dataset.confirm = '';
+        btn.textContent = 'Excluir';
+      }, 3000);
       return;
     }
     await api(`/watches/${id}`, { method: 'DELETE' });
-    return refresh();
-  }
-  if (act === 'check') {
-    btn.disabled = true;
-    btn.textContent = 'Verificando…';
-    try {
-      await api(`/watches/${id}/check`, { method: 'POST' });
-    } catch (err) {
-      alertError(err);
-    }
     await refresh();
   }
 });
 
-$('#btn-check-all').addEventListener('click', async (e) => {
+/**
+ * Botão principal: busca as ofertas de todos os produtos e, no seu PC (com a sessão do
+ * Mercado Livre configurada), gera em seguida os links de afiliado que faltam.
+ */
+$('#btn-update').addEventListener('click', async (e) => {
   const btn = e.currentTarget;
   btn.disabled = true;
-  btn.textContent = 'Verificando…';
+  const summary = [];
   try {
+    setStatus('Buscando ofertas…');
     const r = await api('/check-all', { method: 'POST' });
-    const alerts = r.checked.reduce((n, c) => n + c.alerts, 0);
-    $('#status').textContent =
-      `${r.checked.length} produto(s) verificado(s), ${alerts} alerta(s)` +
-      (r.pending ? `. Faltaram ${r.pending} (limite de tempo): clique de novo.` : '.');
+    summary.push(`${r.checked.length} produto(s) atualizado(s)`);
+    if (r.pending) summary.push(`${r.pending} ficaram para depois (clique de novo)`);
+    await refresh();
+
+    const pending = state.watches.reduce((n, w) => n + (w.pendingLinks || 0), 0);
+    if (pending && state.generator?.local) {
+      if (!state.generator.cookies?.configured) {
+        summary.push(`${pending} link(s) pendente(s): configure a sessão do Mercado Livre em Configurações`);
+      } else {
+        setStatus(`Gerando ${pending} link(s) de afiliado… (cerca de ${Math.ceil((pending * 3) / 60)} min)`);
+        const g = await api('/affiliate/generate', { method: 'POST' });
+        summary.push(`${g.generated.length} link(s) de afiliado gerado(s)`);
+        if (g.failed.length) summary.push(`${g.failed.length} falha(s): ${g.failed[0].error}`);
+        if (g.stopped) summary.push(`parado: ${g.stopped}`);
+      }
+    }
+    setStatus(summary.join(' · '));
   } catch (err) {
-    alertError(err);
+    setStatus(`Erro: ${err.message}`);
   } finally {
     btn.disabled = false;
-    btn.textContent = 'Verificar todos agora';
+    await refresh().catch(() => {});
   }
-  await refresh();
 });
 
-$('#btn-gen-links').addEventListener('click', async (e) => {
-  const btn = e.currentTarget;
-  if (!state.generator?.local) {
-    $('#status').textContent =
-      'A geração automática só funciona com o Precim rodando no seu PC (npm start → http://localhost:3000).';
-    return;
-  }
-  if (!state.generator.cookies?.configured) {
-    $('#status').textContent = 'Cole antes os cookies do Mercado Livre em Configurações.';
-    openTab('config');
-    return;
-  }
-  btn.disabled = true;
-  btn.textContent = 'Gerando links… (pode levar alguns minutos)';
-  try {
-    const r = await api('/affiliate/generate', { method: 'POST' });
-    const parts = [`${r.generated.length} de ${r.total} link(s) gerado(s)`];
-    if (r.failed.length) parts.push(`${r.failed.length} falha(s): ${r.failed[0].error}`);
-    if (r.stopped) parts.push(`Parado: ${r.stopped}`);
-    if (!r.total) parts[0] = 'Todos os itens do Mercado Livre já têm link de afiliado';
-    $('#status').textContent = parts.join(' · ');
-  } catch (err) {
-    alertError(err);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Gerar links de afiliado (ML)';
-  }
-  await refresh();
-});
-
-function openTab(name) {
-  document.querySelector(`.tab[data-tab="${name}"]`).click();
-}
-
-// ---------- formulário de produto ----------
+// ---------- adicionar / editar produto ----------
 const watchDialog = $('#watch-dialog');
 const watchForm = $('#watch-form');
 let editingId = null;
@@ -236,11 +205,10 @@ function openWatchForm(watch) {
   editingId = watch?.id ?? null;
   $('#watch-form-title').textContent = watch ? 'Editar produto' : 'Adicionar produto';
   $('#watch-msg').textContent = '';
+  // Produto novo: só o Mercado Livre marcado (é onde sai o link de afiliado).
+  const checked = (id) => (watch ? watch.stores.includes(id) : id === 'mercadolivre' || !state.ml.configured);
   $('#store-checks').innerHTML = state.stores
-    .map(
-      (s) => `<label class="check"><input type="checkbox" name="store" value="${s.id}"
-        ${!watch || watch.stores.includes(s.id) ? 'checked' : ''}/> ${esc(s.label)}</label>`,
-    )
+    .map((s) => `<label class="check"><input type="checkbox" name="store" value="${s.id}" ${checked(s.id) ? 'checked' : ''}/> ${esc(s.label)}</label>`)
     .join('');
   const f = watchForm.elements;
   f.name.value = watch?.name ?? '';
@@ -251,7 +219,11 @@ function openWatchForm(watch) {
   for (const k of ['minPrice', 'maxPrice', 'targetPrice', 'dropPercent']) f[k].value = watch?.[k] ?? '';
   f.compareUnitPrice.checked = Boolean(watch?.compareUnitPrice);
   f.active.checked = watch?.active ?? true;
+  watchForm.querySelector('details').open = Boolean(
+    watch && (watch.requiredWords.length || watch.urls.length || watch.minPrice || watch.maxPrice || watch.dropPercent || !watch.active),
+  );
   watchDialog.showModal();
+  f.query.focus();
 }
 
 $('#btn-new').addEventListener('click', () => openWatchForm(null));
@@ -276,10 +248,14 @@ watchForm.addEventListener('submit', async (e) => {
   };
   const btn = $('#btn-save');
   btn.disabled = true;
-  btn.textContent = editingId ? 'Salvando…' : 'Buscando preços…';
+  btn.textContent = 'Buscando ofertas…';
   try {
-    if (editingId) await api(`/watches/${editingId}`, { method: 'PUT', body });
-    else await api('/watches', { method: 'POST', body });
+    if (editingId) {
+      await api(`/watches/${editingId}`, { method: 'PUT', body });
+      await api(`/watches/${editingId}/check`, { method: 'POST' }); // já mostra o resultado com os filtros novos
+    } else {
+      await api('/watches', { method: 'POST', body });
+    }
     watchDialog.close();
     await refresh();
   } catch (err) {
@@ -291,112 +267,74 @@ watchForm.addEventListener('submit', async (e) => {
   }
 });
 
-// ---------- links de afiliado ----------
-
-/**
- * Ações de link em cada oferta:
- *  - já tem link de afiliado final (meli.la): copiar;
- *  - Mercado Livre sem link: abrir a página (com seu matt_word) para clicar em
- *    Compartilhar, e campo para colar o link gerado;
- *  - outras lojas: copiar o link normal.
- */
-function affiliateCell(o) {
-  if (o.hasAffiliateLink) {
-    return `<div class="aff-row">
-      <span class="badge good">link de afiliado ✓</span>
-      <button class="small" data-copy="${esc(o.url)}">Copiar link</button>
-      <button class="small" data-aff-remove="${esc(o.rawUrl)}">Trocar</button>
-    </div>`;
-  }
-  if (o.shareUrl) {
-    return `<form class="aff-row" data-aff-form="${esc(o.rawUrl)}">
-      <a class="small-link" href="${esc(o.shareUrl)}" target="_blank" rel="noopener">1. Gerar link de afiliado ↗</a>
-      <input name="link" placeholder="2. cole aqui o link meli.la" autocomplete="off" />
-      <button class="small primary" type="submit">Salvar</button>
-    </form>`;
-  }
-  return `<button class="small" data-copy="${esc(o.url)}">Copiar link</button>`;
-}
-
+// ---------- ofertas de um produto ----------
 let detailId = null;
 
-async function saveAffiliateLink(productUrl, link) {
-  await api('/affiliate-links', { method: 'PUT', body: { productUrl, link } });
-  await openDetail(detailId); // redesenha com o link novo
-  refresh().catch(() => {});
+function offerAction(o) {
+  if (!isMl(o) || o.hasAffiliateLink) return `<button class="primary" data-copy="${esc(o.url)}">Copiar link</button>`;
+  // Sem link de afiliado: alternativa manual (gerar no site e colar aqui).
+  return `<details class="manual">
+    <summary class="muted">link pendente</summary>
+    <a href="${esc(o.shareUrl)}" target="_blank" rel="noopener">Abrir no Mercado Livre ↗</a>
+    <form class="paste" data-aff-form="${esc(o.rawUrl)}">
+      <input name="link" placeholder="cole o meli.la" autocomplete="off">
+      <button type="submit">Salvar</button>
+    </form>
+  </details>`;
 }
+
+async function openDetail(id) {
+  detailId = id;
+  const { watch, report, history } = await api(`/watches/${id}`);
+  const offers = report?.offers ?? [];
+  const errors = (report?.sources ?? []).filter((s) => s.error);
+  $('#detail').innerHTML = `
+    <h2>${esc(watch.name)}</h2>
+    ${chart(history, watch.targetPrice)}
+    ${errors.length ? `<div class="warn">${errors.map((s) => `${esc(s.source)}: ${esc(s.error)}`).join('<br>')}</div>` : ''}
+    ${
+      offers.length
+        ? `<div class="offer-list">${offers
+            .map(
+              (o) => `<div class="offer-row">
+                ${thumb(o)}
+                <div>
+                  <a class="title" href="${esc(o.url)}" target="_blank" rel="noopener">${esc(o.title)}</a>
+                  <div class="muted">${esc(o.store)}</div>
+                  ${tags(offerBadges(o))}
+                </div>
+                <div class="side">
+                  <b>${brl(o.price)}</b>${unitLine(o)}
+                  ${offerAction(o)}
+                </div>
+              </div>`,
+            )
+            .join('')}</div>`
+        : `<p class="muted">${report ? 'Nenhuma oferta passou pelos filtros. Revise o produto em Editar.' : 'Ainda sem ofertas: clique em ↻ Atualizar ofertas.'}</p>`
+    }
+    ${report ? `<p class="muted">Atualizado em ${when(report.at)}</p>` : ''}`;
+  if (!$('#detail-dialog').open) $('#detail-dialog').showModal();
+}
+$('#btn-close-detail').addEventListener('click', () => $('#detail-dialog').close());
 
 $('#detail').addEventListener('submit', async (e) => {
   const form = e.target.closest('[data-aff-form]');
   if (!form) return;
   e.preventDefault();
-  const btn = form.querySelector('button');
-  btn.disabled = true;
   try {
-    await saveAffiliateLink(form.dataset.affForm, form.elements.link.value);
+    await api('/affiliate-links', { method: 'PUT', body: { productUrl: form.dataset.affForm, link: form.elements.link.value } });
+    await openDetail(detailId);
+    refresh().catch(() => {});
   } catch (err) {
-    btn.disabled = false;
     form.elements.link.setCustomValidity(err.message);
     form.elements.link.reportValidity();
     form.elements.link.addEventListener('input', () => form.elements.link.setCustomValidity(''), { once: true });
   }
 });
 
-$('#detail').addEventListener('click', async (e) => {
-  const btn = e.target.closest('[data-aff-remove]');
-  if (btn) await saveAffiliateLink(btn.dataset.affRemove, '');
-});
-
-// ---------- detalhes ----------
-async function openDetail(id) {
-  detailId = id;
-  const { watch, report, history, alerts } = await api(`/watches/${id}`);
-  const offers = report?.offers;
-  $('#detail').innerHTML = `
-    <h2>${esc(watch.name)}</h2>
-    <h3 class="muted">Histórico do menor preço${watch.compareUnitPrice ? ' (por unidade)' : ''}</h3>
-    ${chart(history, watch.targetPrice)}
-    <h3 class="muted">Ofertas da última verificação ${report ? `(${when(report.at)})` : ''}</h3>
-    ${
-      report
-        ? `<p class="muted">${report.sources
-            .map((s) => `${esc(s.source)}: ${s.error ? `⚠ ${esc(s.error)}` : `${s.relevant} de ${s.found} resultados relevantes`}`)
-            .join(' · ')}</p>`
-        : ''
-    }
-    ${
-      offers
-        ? offers.length
-          ? `<div class="table-wrap"><table>
-              <thead><tr><th></th><th>Produto</th><th>Loja</th><th class="num">Preço</th></tr></thead>
-              <tbody>${offers
-                .map(
-                  (o) => `<tr>
-                  <td>${o.image ? `<img src="${esc(o.image)}" alt="" loading="lazy">` : ''}</td>
-                  <td><a href="${esc(o.url)}" target="_blank" rel="noopener">${esc(o.title)}</a>${badgesHtml(o)}
-                    ${affiliateCell(o)}</td>
-                  <td>${esc(o.store)}</td>
-                  <td class="num"><b>${brl(o.price)}</b>${o.oldPrice > o.price ? `<br><s>${brl(o.oldPrice)}</s>` : ''}${
-                    o.units > 1 ? `<br><span class="unit">${brl(o.price / o.units)}/un.</span>` : ''
-                  }</td>
-                </tr>`,
-                )
-                .join('')}</tbody></table></div>`
-          : '<p class="muted">Nenhum resultado passou pelos filtros. Revise o termo de busca e as palavras obrigatórias/excluídas.</p>'
-        : '<p class="muted">Clique em “Verificar” para buscar as ofertas atuais.</p>'
-    }
-    ${
-      alerts.length
-        ? `<h3 class="muted">Alertas recentes</h3>${alerts.map(alertHtml).join('')}`
-        : ''
-    }`;
-  if (!$('#detail-dialog').open) $('#detail-dialog').showModal();
-}
-$('#btn-close-detail').addEventListener('click', () => $('#detail-dialog').close());
-
 function chart(history, target) {
-  if (history.length < 2) return '<p class="muted">O gráfico aparece depois de algumas verificações.</p>';
-  const W = 800, H = 160, P = { l: 70, r: 10, t: 10, b: 22 };
+  if (history.length < 2) return '';
+  const W = 800, H = 120, P = { l: 70, r: 10, t: 8, b: 20 };
   const xs = history.map((h) => Date.parse(h.at));
   const ys = history.map((h) => h.price);
   const lo = Math.min(...ys, target ?? Infinity) * 0.97;
@@ -404,7 +342,7 @@ function chart(history, target) {
   const x = (t) => P.l + ((t - xs[0]) / (xs.at(-1) - xs[0] || 1)) * (W - P.l - P.r);
   const y = (v) => P.t + (1 - (v - lo) / (hi - lo || 1)) * (H - P.t - P.b);
   const pts = history.map((h, i) => `${x(xs[i]).toFixed(1)},${y(ys[i]).toFixed(1)}`).join(' ');
-  return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Histórico de preço">
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Histórico do menor preço">
     <text x="4" y="${y(hi) + 10}">${brl(hi)}</text>
     <text x="4" y="${y(lo)}">${brl(lo)}</text>
     <text x="${P.l}" y="${H - 4}">${when(history[0].at)}</text>
@@ -417,11 +355,11 @@ function chart(history, target) {
 // ---------- alertas ----------
 function alertHtml(a) {
   return `<div class="alert">
-    <b>${esc(a.watchName ?? '')}</b> ${brl(a.offer.price)} — ${esc(a.offer.store)} · <span class="muted">${when(a.at)}</span><br>
+    <b>${esc(a.watchName ?? '')}</b> ${brl(a.offer.price)} · <span class="muted">${esc(a.offer.store)} · ${when(a.at)}</span><br>
     <a href="${esc(a.offer.url)}" target="_blank" rel="noopener">${esc(a.offer.title)}</a><br>
     <span class="muted">${esc(a.reason)}</span>
     ${a.sent.length ? `<span class="badge good">enviado: ${a.sent.join(', ')}</span>` : ''}
-    ${a.errors.length ? `<div class="error-box">⚠ ${a.errors.map(esc).join('<br>')}</div>` : ''}
+    ${a.errors.length ? `<div class="warn">${a.errors.map(esc).join('<br>')}</div>` : ''}
   </div>`;
 }
 
@@ -429,15 +367,20 @@ async function loadAlerts() {
   const alerts = await api('/alerts');
   $('#alert-list').innerHTML = alerts.length
     ? alerts.map(alertHtml).join('')
-    : '<p class="empty">Nenhum alerta ainda. Eles aparecem aqui quando um preço atinge o alvo.</p>';
+    : '<p class="empty">Nenhum alerta ainda. Eles aparecem aqui quando um produto chega ao preço que você definiu.</p>';
 }
 
 // ---------- configurações ----------
 const settingsForm = $('#settings-form');
+const setMsg = (text, kind = '') => {
+  $('#settings-msg').textContent = text;
+  $('#settings-msg').className = `msg ${kind}`;
+};
 
 function fillSettings() {
   const s = state.settings;
   const f = settingsForm.elements;
+  f.affiliateTag.value = new URLSearchParams(s.affiliate?.mlParams ?? '').get('matt_word') ?? '';
   f.intervalMinutes.value = s.intervalMinutes;
   f['telegram.enabled'].checked = s.telegram.enabled;
   f['telegram.botToken'].value = s.telegram.botToken;
@@ -445,51 +388,49 @@ function fillSettings() {
   f['whatsapp.enabled'].checked = s.whatsapp.enabled;
   f['whatsapp.phone'].value = s.whatsapp.phone;
   f['whatsapp.apiKey'].value = s.whatsapp.apiKey;
-  f['affiliate.mlParams'].value = s.affiliate?.mlParams ?? '';
+  $('#tg-state').textContent = s.telegram.enabled ? '· ativo' : '· desligado';
+  $('#wa-state').textContent = s.whatsapp.enabled ? '· ativo' : '· desligado';
   $('#schedule-info').textContent = state.scheduleInfo;
-  renderMl();
+  $('#ml-warning').innerHTML = state.ml.configured
+    ? ''
+    : '<div class="warn">Mercado Livre sem credenciais: defina ML_CLIENT_ID e ML_CLIENT_SECRET nas variáveis de ambiente.</div>';
   renderGenerator();
   setMsg('');
-}
-
-function renderMl() {
-  $("#ml-box").innerHTML = state.ml.configured
-    ? "<p class=\"msg ok\">✔ Mercado Livre configurado. Marque a loja ao adicionar um produto.</p>"
-    : "<p class=\"hint\">Defina <code>ML_CLIENT_ID</code> e <code>ML_CLIENT_SECRET</code> nas variáveis de ambiente (Dev Center do Mercado Livre) e faça um novo deploy.</p>";
 }
 
 function renderGenerator() {
   const g = state.generator;
   if (!g?.local) {
-    $('#gen-box').innerHTML = `<p class="hint">Disponível só com o Precim rodando no seu PC (<code>npm start</code> →
-      <code>http://localhost:3000</code>). Os cookies da sua conta do Mercado Livre ficam no seu computador e nunca vão para a Vercel.</p>`;
+    $('#gen-box').innerHTML =
+      '<p class="hint">Os links de afiliado são gerados pelo Precim no seu PC (<code>npm start</code> → <code>localhost:3000</code>), onde fica a sua sessão do Mercado Livre.</p>';
     return;
   }
   $('#gen-box').innerHTML = `
-    <p class="${g.cookies.configured ? 'msg ok' : 'hint'}">${
+    <p class="msg ${g.cookies.configured ? 'ok' : ''}">${
       g.cookies.configured
-        ? `✔ Cookies salvos no seu PC (${g.cookies.count} cookies, ${when(g.cookies.savedAt)}).`
-        : 'Cookies ainda não configurados.'
+        ? `✔ Sessão do Mercado Livre salva neste PC (${when(g.cookies.savedAt)})`
+        : 'Sessão do Mercado Livre não configurada: os links de afiliado não serão gerados.'
     }</p>
-    <p class="hint">
-      1) Instale a extensão <b>Cookie-Editor</b> no Chrome (Chrome Web Store).
-      2) Abra <b>mercadolivre.com.br</b> logado na sua conta de afiliado (aparece “Olá, …” no topo).
-      3) Clique no ícone 🧩 → <b>Cookie-Editor</b> → <b>Export</b> → <b>JSON</b> (os cookies são copiados).
-      4) Cole abaixo (Ctrl+V) e clique em <b>Salvar cookies</b>. Refaça quando o gerador avisar que a sessão expirou.
-    </p>
-    <textarea id="gen-cookies" rows="3" placeholder='[{"name": "...", "value": "...", ...}]'></textarea>
-    <div class="toolbar"><button type="button" id="btn-save-cookies">Salvar cookies</button></div>
-    <p class="hint">⚠ Os cookies dão acesso à sua conta do Mercado Livre. Ficam só em <code>ml-cookies.json</code> nesta pasta (fora do git).
-      A geração usa uma rota não oficial do site e pode parar de funcionar se o Mercado Livre mudar.</p>`;
+    <details ${g.cookies.configured ? '' : 'open'}>
+      <summary>${g.cookies.configured ? 'Atualizar sessão' : 'Configurar sessão'}</summary>
+      <p class="hint">
+        1) Instale a extensão <b>Cookie-Editor</b> no Chrome.
+        2) Abra <b>mercadolivre.com.br</b> logado na sua conta.
+        3) 🧩 → <b>Cookie-Editor</b> → <b>Export</b> → <b>JSON</b>.
+        4) Cole abaixo e salve. Fica só neste PC.
+      </p>
+      <textarea id="gen-cookies" rows="3" placeholder="cole aqui o JSON exportado"></textarea>
+      <button type="button" id="btn-save-cookies">Salvar sessão</button>
+    </details>`;
 }
 
 $('#gen-box').addEventListener('click', async (e) => {
   if (e.target.id !== 'btn-save-cookies') return;
   try {
-    const r = await api('/local/ml-cookies', { method: 'PUT', body: { cookies: $('#gen-cookies').value } });
+    await api('/local/ml-cookies', { method: 'PUT', body: { cookies: $('#gen-cookies').value } });
     await refresh();
     renderGenerator();
-    setMsg(`${r.count} cookies salvos no seu PC.`, 'ok');
+    setMsg('Sessão do Mercado Livre salva.', 'ok');
   } catch (err) {
     setMsg(err.message, 'error');
   }
@@ -501,20 +442,16 @@ function readSettings() {
     intervalMinutes: Number(f.intervalMinutes.value),
     telegram: { enabled: f['telegram.enabled'].checked, botToken: f['telegram.botToken'].value, chatId: f['telegram.chatId'].value },
     whatsapp: { enabled: f['whatsapp.enabled'].checked, phone: f['whatsapp.phone'].value, apiKey: f['whatsapp.apiKey'].value },
-    affiliate: { mlParams: f['affiliate.mlParams'].value },
+    affiliate: { mlParams: f.affiliateTag.value },
   };
 }
-
-const setMsg = (text, kind = '') => {
-  $('#settings-msg').textContent = text;
-  $('#settings-msg').className = `msg ${kind}`;
-};
 
 settingsForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   try {
     await api('/settings', { method: 'PUT', body: readSettings() });
     await refresh();
+    fillSettings();
     setMsg('Configurações salvas.', 'ok');
   } catch (err) {
     setMsg(err.message, 'error');
@@ -546,18 +483,16 @@ $('#btn-find-chat').addEventListener('click', async () => {
   }
 });
 
-function alertError(err) {
-  $('#status').textContent = `Erro: ${err.message}`;
-}
-
+// ---------- início ----------
 async function start() {
   const session = await api('/session');
   if (!session.loggedIn) return showLogin();
-  showApp();
+  $('#login-screen').hidden = true;
+  $('#app').hidden = false;
   await refresh();
 }
 
-start().catch(alertError);
+start().catch((err) => setStatus(`Erro: ${err.message}`));
 setInterval(() => {
-  if (!$('#app').hidden) refresh().catch(() => {});
+  if (!$('#app').hidden && !$('#btn-update').disabled) refresh().catch(() => {});
 }, 60_000);

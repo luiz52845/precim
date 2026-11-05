@@ -143,8 +143,17 @@ app.get(
     const lastBest = (id: string) => db.history.findLast((p) => p.watchId === id);
     res.json({
       watches: db.watches.map((w) => {
-        const best = db.reports[w.id]?.best ?? lastBest(w.id);
-        return { ...w, best: best && withAffiliate(best, db) };
+        const report = db.reports[w.id];
+        const best = report?.best ?? lastBest(w.id);
+        return {
+          ...w,
+          best: best && withAffiliate(best, db),
+          offersCount: report?.offers.length ?? 0,
+          // Ofertas do Mercado Livre ainda sem link de afiliado final.
+          pendingLinks: (report?.offers ?? []).filter((o) => isMercadoLivreUrl(o.url) && !db.affiliateLinks[o.url]).length,
+          // Só mostra erro no cartão quando nenhuma loja respondeu.
+          failed: Boolean(report && !report.offers.length && report.sources.some((s) => s.error)),
+        };
       }),
       stores: Object.entries(STORES).map(([id, s]) => ({ id, label: s.label })),
       settings: db.settings,
