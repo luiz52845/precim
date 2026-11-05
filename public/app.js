@@ -472,9 +472,10 @@ function renderGenerator() {
         : 'Cookies ainda não configurados.'
     }</p>
     <p class="hint">
-      1) No Chrome, entre em <b>mercadolivre.com.br</b> logado na sua conta de afiliado.
-      2) Com uma extensão de exportar cookies em JSON (ex.: <b>“Export cookie JSON file”</b>, da Chrome Web Store), exporte os cookies da página.
-      3) Abra o arquivo baixado, copie tudo e cole abaixo. Refaça quando o gerador avisar que a sessão expirou.
+      1) Instale a extensão <b>Cookie-Editor</b> no Chrome (Chrome Web Store).
+      2) Abra <b>mercadolivre.com.br</b> logado na sua conta de afiliado (aparece “Olá, …” no topo).
+      3) Clique no ícone 🧩 → <b>Cookie-Editor</b> → <b>Export</b> → <b>JSON</b> (os cookies são copiados).
+      4) Cole abaixo (Ctrl+V) e clique em <b>Salvar cookies</b>. Refaça quando o gerador avisar que a sessão expirou.
     </p>
     <textarea id="gen-cookies" rows="3" placeholder='[{"name": "...", "value": "...", ...}]'></textarea>
     <div class="toolbar"><button type="button" id="btn-save-cookies">Salvar cookies</button></div>
