@@ -121,6 +121,7 @@ export async function searchMercadoLivre(query: string): Promise<Offer[]> {
       available: true,
       units: detectUnits(p.name),
       badges: badgesFor(cheapest),
+      itemId: cheapest.item_id,
     };
   });
   return offers.filter((o): o is Offer => o !== undefined);

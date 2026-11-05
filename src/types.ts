@@ -48,6 +48,8 @@ export interface Offer {
   units?: number;
   /** Destaques da oferta: frete grátis, Full, loja oficial... */
   badges?: string[];
+  /** Mercado Livre: código do anúncio mais barato (ex.: "MLB2188453681"). */
+  itemId?: string;
 }
 
 /** Registro do menor preço encontrado em uma verificação. */

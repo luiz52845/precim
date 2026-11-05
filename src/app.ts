@@ -10,12 +10,12 @@ import { mlConfigured } from './scrapers/mercadolivre.ts';
 import {
   MlSessionError,
   cookiesStatus,
-  createMlAffiliateLink,
+  createMlAffiliateLinkForOffer,
   isLocal,
   saveCookies,
 } from './ml-affiliate-generator.ts';
 import { isMercadoLivreUrl, parseAffiliateInput, validateProductAffiliateLink, withAffiliate } from './affiliate.ts';
-import type { CheckReport, DbShape, Settings, StoreId, Watch } from './types.ts';
+import type { CheckReport, DbShape, Offer, Settings, StoreId, Watch } from './types.ts';
 
 /** Tempo máximo gasto verificando produtos numa requisição (a função tem limite de 60s). */
 const BATCH_BUDGET_MS = 40_000;
@@ -338,21 +338,22 @@ app.post(
     if (!tag) throw new BadRequest('salve primeiro o seu link de afiliado em Configurações (para obter a sua tag)');
 
     const watchId = req.body?.watchId ? String(req.body.watchId) : undefined;
-    const urls = new Set<string>();
+    // Uma oferta por produto do catálogo (a chave do link salvo é o link do produto).
+    const offers = new Map<string, Offer>();
     for (const [id, report] of Object.entries(db.reports)) {
       if (watchId && id !== watchId) continue;
       for (const o of report.offers) {
-        if (isMercadoLivreUrl(o.url) && !db.affiliateLinks[o.url]) urls.add(o.url);
+        if (isMercadoLivreUrl(o.url) && !db.affiliateLinks[o.url] && !offers.has(o.url)) offers.set(o.url, o);
       }
     }
 
     const generated: { url: string; link: string }[] = [];
     const failed: { url: string; error: string }[] = [];
     let stopped: string | undefined;
-    for (const url of urls) {
+    for (const [url, offer] of offers) {
       if (generated.length || failed.length) await new Promise((r) => setTimeout(r, GENERATE_DELAY_MS));
       try {
-        const link = await createMlAffiliateLink(url, tag);
+        const link = await createMlAffiliateLinkForOffer(offer, tag);
         await mutate((d) => {
           d.affiliateLinks[url] = link;
         });
@@ -370,7 +371,7 @@ app.post(
         }
       }
     }
-    res.json({ total: urls.size, generated, failed, stopped, remaining: urls.size - generated.length - failed.length });
+    res.json({ total: offers.size, generated, failed, stopped, remaining: offers.size - generated.length - failed.length });
   }),
 );
 

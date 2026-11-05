@@ -114,7 +114,55 @@ async function csrfToken(productUrl: string, cookie: string, fallback?: string):
   throw new Error('não encontrei o token de segurança (CSRF) na página do produto');
 }
 
-/** Gera o link meli.la de um produto. `tag` é o seu identificador (matt_word). */
+/** O programa de afiliados recusou o formato do link ("URL not allowed", código 111). */
+class UrlNotAllowedError extends Error {}
+
+const slugify = (text: string) =>
+  text
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 120);
+
+/**
+ * Formatos de link a tentar, do mais provável ao menos provável:
+ *  1. link do anúncio (produto.mercadolivre.com.br/MLB-123), o formato que o programa aceita;
+ *  2. página do catálogo com o nome do produto (/nome-do-produto/p/MLB123), como no site;
+ *  3. página do catálogo curta (/p/MLB123).
+ */
+export function candidateUrls(offer: { url: string; title: string; itemId?: string }): string[] {
+  const urls: string[] = [];
+  const item = offer.itemId?.match(/^([A-Z]{3})(\d+)$/);
+  if (item) urls.push(`https://produto.mercadolivre.com.br/${item[1]}-${item[2]}`);
+  const product = offer.url.match(/\/p\/([A-Z]{3}\d+)/)?.[1];
+  if (product) urls.push(`https://www.mercadolivre.com.br/${slugify(offer.title)}/p/${product}`);
+  urls.push(offer.url);
+  return [...new Set(urls)];
+}
+
+/**
+ * Gera o meli.la de uma oferta, tentando os formatos de link em ordem até o programa
+ * de afiliados aceitar um. `tag` é o seu identificador (matt_word).
+ */
+export async function createMlAffiliateLinkForOffer(
+  offer: { url: string; title: string; itemId?: string },
+  tag: string,
+): Promise<string> {
+  const refused: string[] = [];
+  for (const url of candidateUrls(offer)) {
+    try {
+      return await createMlAffiliateLink(url, tag);
+    } catch (err) {
+      if (!(err instanceof UrlNotAllowedError)) throw err;
+      refused.push(url);
+    }
+  }
+  throw new Error(`o programa de afiliados recusou todos os formatos de link: ${refused.join(' , ')}`);
+}
+
+/** Gera o link meli.la de uma URL de produto. `tag` é o seu identificador (matt_word). */
 export async function createMlAffiliateLink(productUrl: string, tag: string): Promise<string> {
   const { header, csrfCookie } = cookieHeader();
   const token = await csrfToken(productUrl, header, csrfCookie);
@@ -136,6 +184,9 @@ export async function createMlAffiliateLink(productUrl: string, tag: string): Pr
     throw new MlSessionError(`o Mercado Livre recusou a sessão (HTTP ${res.status}): exporte os cookies de novo`);
   }
   const text = await res.text();
+  if (res.status === 400 && /not allowed|"error_code"\s*:\s*111/i.test(text)) {
+    throw new UrlNotAllowedError(text.slice(0, 150));
+  }
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${text.replace(/\s+/g, ' ').slice(0, 150)}`);
   let data: { short_url?: string };
   try {
