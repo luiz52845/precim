@@ -13,7 +13,16 @@ import type { DbShape } from './types.ts';
  * O banco guarda os links originais das ofertas; a troca é feita só na exibição/envio.
  */
 
-type AffiliateCtx = Pick<DbShape, 'settings' | 'affiliateLinks'>;
+type AffiliateCtx = Pick<DbShape, 'settings' | 'affiliateLinks'> & Partial<Pick<DbShape, 'affiliateBlocked'>>;
+
+/** Depois de quanto tempo tentar de novo um produto recusado pelo programa de afiliados. */
+export const BLOCKED_RETRY_MS = 7 * 24 * 3600 * 1000;
+
+/** O programa de afiliados recusou este produto recentemente? */
+export function isAffiliateBlocked(url: string, ctx: Partial<Pick<DbShape, 'affiliateBlocked'>>): boolean {
+  const at = ctx.affiliateBlocked?.[url];
+  return Boolean(at && Date.now() - Date.parse(at) < BLOCKED_RETRY_MS);
+}
 
 const ML_HOSTS = /(^|\.)mercadoli(vre|bre)\.com(\.br)?$/;
 /** Domínio dos links curtos de afiliado gerados pelo botão Compartilhar. */
@@ -101,6 +110,8 @@ export interface AffiliateInfo {
   shareUrl?: string;
   /** true quando já existe link final de afiliado salvo para este produto. */
   hasAffiliateLink?: boolean;
+  /** true quando o programa de afiliados recusou este produto (ex.: categoria não permitida). */
+  affiliateBlocked?: boolean;
 }
 
 /** Aplica o link de afiliado a qualquer objeto com `url` (sem alterar o original). */
@@ -112,5 +123,6 @@ export function withAffiliate<T extends { url: string }>(item: T, ctx: Affiliate
     rawUrl: item.url,
     shareUrl: ml ? affiliateParamUrl(item.url, ctx) : undefined,
     hasAffiliateLink: ml ? Boolean(ctx.affiliateLinks[item.url]) : undefined,
+    affiliateBlocked: ml && !ctx.affiliateLinks[item.url] ? isAffiliateBlocked(item.url, ctx) : undefined,
   };
 }

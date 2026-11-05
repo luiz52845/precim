@@ -45,6 +45,7 @@ function normalize(raw: Partial<DbShape> | null): DbShape {
     notified: raw?.notified ?? {},
     reports: raw?.reports ?? {},
     affiliateLinks: raw?.affiliateLinks ?? {},
+    affiliateBlocked: raw?.affiliateBlocked ?? {},
     settings: {
       ...def,
       ...raw?.settings,

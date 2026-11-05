@@ -117,6 +117,12 @@ async function csrfToken(productUrl: string, cookie: string, fallback?: string):
 /** O programa de afiliados recusou o formato do link ("URL not allowed", código 111). */
 class UrlNotAllowedError extends Error {}
 
+/**
+ * O programa recusou o produto em todos os formatos de link: o produto não participa
+ * do programa (ex.: fórmulas infantis, que têm promoção restrita por lei).
+ */
+export class MlNotAllowedError extends Error {}
+
 const slugify = (text: string) =>
   text
     .normalize('NFD')
@@ -159,7 +165,7 @@ export async function createMlAffiliateLinkForOffer(
       refused.push(url);
     }
   }
-  throw new Error(`o programa de afiliados recusou todos os formatos de link: ${refused.join(' , ')}`);
+  throw new MlNotAllowedError(`o programa de afiliados recusou este produto (testado: ${refused.join(' , ')})`);
 }
 
 /** Gera o link meli.la de uma URL de produto. `tag` é o seu identificador (matt_word). */

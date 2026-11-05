@@ -106,5 +106,7 @@ export interface DbShape {
   reports: Record<string, CheckReport>;
   /** Link de afiliado final (meli.la) por link de produto do Mercado Livre. */
   affiliateLinks: Record<string, string>;
+  /** Produtos que o programa de afiliados recusou (data da recusa), para não insistir. */
+  affiliateBlocked: Record<string, string>;
   settings: Settings;
 }

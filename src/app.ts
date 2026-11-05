@@ -8,13 +8,14 @@ import { notifyAll, telegramChats } from './notify/index.ts';
 import { STORES } from './scrapers/index.ts';
 import { mlConfigured } from './scrapers/mercadolivre.ts';
 import {
+  MlNotAllowedError,
   MlSessionError,
   cookiesStatus,
   createMlAffiliateLinkForOffer,
   isLocal,
   saveCookies,
 } from './ml-affiliate-generator.ts';
-import { isMercadoLivreUrl, parseAffiliateInput, validateProductAffiliateLink, withAffiliate } from './affiliate.ts';
+import { isAffiliateBlocked, isMercadoLivreUrl, parseAffiliateInput, validateProductAffiliateLink, withAffiliate } from './affiliate.ts';
 import type { CheckReport, DbShape, Offer, Settings, StoreId, Watch } from './types.ts';
 
 /** Tempo máximo gasto verificando produtos numa requisição (a função tem limite de 60s). */
@@ -150,7 +151,9 @@ app.get(
           best: best && withAffiliate(best, db),
           offersCount: report?.offers.length ?? 0,
           // Ofertas do Mercado Livre ainda sem link de afiliado final.
-          pendingLinks: (report?.offers ?? []).filter((o) => isMercadoLivreUrl(o.url) && !db.affiliateLinks[o.url]).length,
+          pendingLinks: (report?.offers ?? []).filter(
+            (o) => isMercadoLivreUrl(o.url) && !db.affiliateLinks[o.url] && !isAffiliateBlocked(o.url, db),
+          ).length,
           // Só mostra erro no cartão quando nenhuma loja respondeu.
           failed: Boolean(report && !report.offers.length && report.sources.some((s) => s.error)),
         };
@@ -275,6 +278,13 @@ app.put(
       affiliate: { mlParams: parseAffiliate(String(b.affiliate?.mlParams ?? '')) },
     };
     await mutate((d) => {
+      // A tela mostra só a etiqueta (matt_word): mantém o matt_tool já salvo se a etiqueta não mudou.
+      const next = new URLSearchParams(settings.affiliate.mlParams);
+      const prev = new URLSearchParams(d.settings.affiliate?.mlParams ?? '');
+      if (next.get('matt_word') && next.get('matt_word') === prev.get('matt_word') && !next.has('matt_tool') && prev.get('matt_tool')) {
+        next.set('matt_tool', prev.get('matt_tool')!);
+        settings.affiliate.mlParams = next.toString();
+      }
       d.settings = settings;
     });
     res.json({ settings });
@@ -352,15 +362,18 @@ app.post(
     for (const [id, report] of Object.entries(db.reports)) {
       if (watchId && id !== watchId) continue;
       for (const o of report.offers) {
-        if (isMercadoLivreUrl(o.url) && !db.affiliateLinks[o.url] && !offers.has(o.url)) offers.set(o.url, o);
+        if (!isMercadoLivreUrl(o.url) || db.affiliateLinks[o.url] || offers.has(o.url)) continue;
+        if (isAffiliateBlocked(o.url, db)) continue; // recusado pelo programa há pouco tempo
+        offers.set(o.url, o);
       }
     }
 
     const generated: { url: string; link: string }[] = [];
     const failed: { url: string; error: string }[] = [];
+    const blocked: string[] = [];
     let stopped: string | undefined;
     for (const [url, offer] of offers) {
-      if (generated.length || failed.length) await new Promise((r) => setTimeout(r, GENERATE_DELAY_MS));
+      if (generated.length || failed.length || blocked.length) await new Promise((r) => setTimeout(r, GENERATE_DELAY_MS));
       try {
         const link = await createMlAffiliateLinkForOffer(offer, tag);
         await mutate((d) => {
@@ -373,6 +386,15 @@ app.post(
           stopped = err.message;
           break;
         }
+        if (err instanceof MlNotAllowedError) {
+          // Produto fora do programa (ex.: fórmula infantil): marca e segue para o próximo.
+          blocked.push(url);
+          await mutate((d) => {
+            d.affiliateBlocked[url] = new Date().toISOString();
+          });
+          console.log(`fora do programa de afiliados: ${url}`);
+          continue;
+        }
         failed.push({ url, error: (err as Error).message });
         if (failed.length >= 3 && !generated.length) {
           stopped = 'as 3 primeiras tentativas falharam; parei para não insistir';
@@ -380,7 +402,14 @@ app.post(
         }
       }
     }
-    res.json({ total: offers.size, generated, failed, stopped, remaining: offers.size - generated.length - failed.length });
+    res.json({
+      total: offers.size,
+      generated,
+      blocked,
+      failed,
+      stopped,
+      remaining: offers.size - generated.length - failed.length - blocked.length,
+    });
   }),
 );
 

@@ -76,6 +76,13 @@ const pendingText = () =>
 
 /** Campo com o link (de afiliado, quando houver) e botão Copiar. */
 function linkBox(o) {
+  if (isMl(o) && o.affiliateBlocked) {
+    return `<div class="pending">Este produto não participa do programa de afiliados do Mercado Livre.</div>
+      <div class="linkbox">
+        <input readonly value="${esc(o.url)}" aria-label="Link comum" onclick="this.select()">
+        <button data-copy="${esc(o.url)}">Copiar link comum</button>
+      </div>`;
+  }
   if (isMl(o) && !o.hasAffiliateLink) return `<div class="pending">${pendingText()}</div>`;
   return `<div class="linkbox">
     <input readonly value="${esc(o.url)}" aria-label="Link" onclick="this.select()">
@@ -183,6 +190,7 @@ $('#btn-update').addEventListener('click', async (e) => {
         setStatus(`Gerando ${pending} link(s) de afiliado… (cerca de ${Math.ceil((pending * 3) / 60)} min)`);
         const g = await api('/affiliate/generate', { method: 'POST' });
         summary.push(`${g.generated.length} link(s) de afiliado gerado(s)`);
+        if (g.blocked?.length) summary.push(`${g.blocked.length} produto(s) fora do programa de afiliados`);
         if (g.failed.length) summary.push(`${g.failed.length} falha(s): ${g.failed[0].error}`);
         if (g.stopped) summary.push(`parado: ${g.stopped}`);
       }
@@ -272,6 +280,10 @@ let detailId = null;
 
 function offerAction(o) {
   if (!isMl(o) || o.hasAffiliateLink) return `<button class="primary" data-copy="${esc(o.url)}">Copiar link</button>`;
+  if (o.affiliateBlocked) {
+    return `<span class="muted">fora do programa de afiliados</span>
+      <button data-copy="${esc(o.url)}">Copiar link comum</button>`;
+  }
   // Sem link de afiliado: alternativa manual (gerar no site e colar aqui).
   return `<details class="manual">
     <summary class="muted">link pendente</summary>
@@ -380,7 +392,11 @@ const setMsg = (text, kind = '') => {
 function fillSettings() {
   const s = state.settings;
   const f = settingsForm.elements;
-  f.affiliateTag.value = new URLSearchParams(s.affiliate?.mlParams ?? '').get('matt_word') ?? '';
+  const aff = new URLSearchParams(s.affiliate?.mlParams ?? '');
+  f.affiliateTag.value = aff.get('matt_word') ?? '';
+  $('#affiliate-tool').textContent = aff.get('matt_tool')
+    ? `Código da ferramenta de afiliado: ${aff.get('matt_tool')}.`
+    : 'Dica: cole aqui um link de afiliado completo (com matt_tool=…) para salvar também o código da sua ferramenta.';
   f.intervalMinutes.value = s.intervalMinutes;
   f['telegram.enabled'].checked = s.telegram.enabled;
   f['telegram.botToken'].value = s.telegram.botToken;
